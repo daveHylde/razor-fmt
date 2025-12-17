@@ -1,6 +1,6 @@
 -- razor-fmt/html.lua
 -- HTML tokenizer and formatter with JetBrains Rider-style defaults
--- Only formats pure HTML - preserves all Razor constructs (@...) as-is
+-- Formats HTML tags, preserves Razor control flow blocks as-is
 
 local M = {}
 
@@ -38,7 +38,40 @@ M.TOKEN_TYPES = {
   TEXT = "TEXT",
   COMMENT = "COMMENT",
   DOCTYPE = "DOCTYPE",
-  RAZOR = "RAZOR", -- Anything starting with @
+  RAZOR_LINE = "RAZOR_LINE",   -- Line directives like @inject, @using
+  RAZOR_BLOCK = "RAZOR_BLOCK", -- Control flow blocks like @if, @foreach
+}
+
+-- Razor line directives (consume entire line)
+local LINE_DIRECTIVES = {
+  inject = true,
+  using = true,
+  namespace = true,
+  page = true,
+  model = true,
+  inherits = true,
+  implements = true,
+  layout = true,
+  attribute = true,
+  preservewhitespace = true,
+  typeparam = true,
+  rendermode = true,
+}
+
+-- Razor control flow keywords (have blocks)
+local CONTROL_FLOW_KEYWORDS = {
+  ["if"] = true,
+  ["for"] = true,
+  ["foreach"] = true,
+  ["while"] = true,
+  ["do"] = true,
+  ["switch"] = true,
+  ["try"] = true,
+  ["lock"] = true,
+  ["using"] = true, -- using as statement, not directive
+  ["code"] = true,  -- Blazor @code block
+  ["functions"] = true, -- Razor @functions block
+  ["section"] = true, -- @section Name { }
 }
 
 --- Parse attributes from an attribute string
@@ -120,6 +153,10 @@ end
 ---@param config table
 ---@return string
 function M.format_attributes_stacked(attrs, tag_name, indent, is_self_closing, config)
+  if not tag_name then
+    return ""
+  end
+
   if #attrs == 0 then
     if is_self_closing then
       return "<" .. tag_name .. " />"
@@ -186,7 +223,7 @@ function M.format_attributes_stacked(attrs, tag_name, indent, is_self_closing, c
   return table.concat(lines, "\n")
 end
 
---- Skip over a balanced construct (braces, parens, brackets)
+--- Skip over a balanced construct (braces, parens, brackets, angle brackets)
 ---@param text string
 ---@param start_pos number Position after the opening char
 ---@param open_char string
@@ -223,223 +260,275 @@ local function find_matching_close(text, start_pos, open_char, close_char)
   return nil
 end
 
---- Consume a Razor construct starting at @
---- Returns the end position (inclusive) of the Razor construct
+--- Try to consume a Razor control flow block starting at pos
+--- Returns end position if this is a control flow block, nil otherwise
 ---@param text string
 ---@param pos number Position of the @
----@return number end_pos
-local function consume_razor(text, pos)
+---@return number|nil end_pos
+local function try_consume_control_flow(text, pos)
   local len = #text
-  local start = pos
-  pos = pos + 1 -- skip @
-
-  if pos > len then
-    return start
+  if pos > len or text:sub(pos, pos) ~= "@" then
+    return nil
   end
 
-  local c = text:sub(pos, pos)
+  local after_at = pos + 1
+  if after_at > len then
+    return nil
+  end
 
-  -- @@ escape
-  if c == "@" then
-    return pos
+  local c = text:sub(after_at, after_at)
+
+  -- @{ } code block
+  if c == "{" then
+    local close = find_matching_close(text, after_at + 1, "{", "}")
+    return close
   end
 
   -- @* comment *@
   if c == "*" then
-    local end_marker = text:find("%*@", pos + 1)
+    local end_marker = text:find("%*@", after_at + 1)
     if end_marker then
       return end_marker + 1
     end
     return len
   end
 
-  -- @{ } code block
-  if c == "{" then
-    local close = find_matching_close(text, pos + 1, "{", "}")
-    return close or len
+  -- Check for control flow keyword
+  if not c:match("[%a]") then
+    return nil
   end
 
-  -- @( ) explicit expression
-  if c == "(" then
-    local close = find_matching_close(text, pos + 1, "(", ")")
-    return close or len
+  -- Consume identifier
+  local id_end = after_at
+  while id_end <= len and text:sub(id_end, id_end):match("[%w_]") do
+    id_end = id_end + 1
+  end
+  local identifier = text:sub(after_at, id_end - 1):lower()
+
+  -- Check if it's a control flow keyword
+  if not CONTROL_FLOW_KEYWORDS[identifier] then
+    return nil
   end
 
-  -- @identifier... (directive, keyword, or expression)
-  if c:match("[%a_]") then
-    -- Consume identifier
-    while pos <= len and text:sub(pos, pos):match("[%w_]") do
-      pos = pos + 1
+  -- For 'using', check if it's a statement (has parens) or directive (no parens)
+  if identifier == "using" then
+    local ws_end = id_end
+    while ws_end <= len and text:sub(ws_end, ws_end):match("%s") do
+      ws_end = ws_end + 1
+    end
+    if text:sub(ws_end, ws_end) ~= "(" then
+      return nil -- It's a directive, not a statement
+    end
+  end
+
+  -- Skip whitespace after keyword
+  local kw_pos = id_end
+  while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+    kw_pos = kw_pos + 1
+  end
+
+  -- For @section, consume the section name first
+  if identifier == "section" then
+    -- Consume section name (identifier)
+    if not text:sub(kw_pos, kw_pos):match("[%a_]") then
+      return nil
+    end
+    while kw_pos <= len and text:sub(kw_pos, kw_pos):match("[%w_]") do
+      kw_pos = kw_pos + 1
+    end
+    -- Skip whitespace before block
+    while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+      kw_pos = kw_pos + 1
+    end
+  end
+
+  -- Consume condition in parens if present (for if, for, foreach, while, switch, lock, using, catch)
+  if text:sub(kw_pos, kw_pos) == "(" then
+    local paren_close = find_matching_close(text, kw_pos + 1, "(", ")")
+    if paren_close then
+      kw_pos = paren_close + 1
+    else
+      return nil
+    end
+  end
+
+  -- Skip whitespace before block
+  while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+    kw_pos = kw_pos + 1
+  end
+
+  -- Consume block
+  if text:sub(kw_pos, kw_pos) ~= "{" then
+    -- do-while doesn't need initial brace check, single statement form
+    if identifier == "do" then
+      -- For do, we need: do { } while (condition);
+      -- But if no brace, might be single statement - let's just require brace
+      return nil
+    end
+    return nil
+  end
+
+  local brace_close = find_matching_close(text, kw_pos + 1, "{", "}")
+  if not brace_close then
+    return nil
+  end
+
+  kw_pos = brace_close + 1
+
+  -- Handle chained blocks: else, else if, catch, finally, while (for do-while)
+  while true do
+    -- Skip whitespace
+    local ws_start = kw_pos
+    while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+      kw_pos = kw_pos + 1
     end
 
-    -- Check what follows: could be generic <T>, method call (), indexer [], member access .
-    while pos <= len do
-      local next_c = text:sub(pos, pos)
+    local rest = text:sub(kw_pos)
 
-      -- Skip whitespace only if followed by something that continues the expression
-      local ws_end = pos
-      while ws_end <= len and text:sub(ws_end, ws_end):match("%s") do
-        ws_end = ws_end + 1
+    -- else if
+    if rest:match("^else%s+if%s*%(") or rest:match("^else%s*if%s*%(") then
+      kw_pos = kw_pos + 4 -- skip "else"
+      while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+        kw_pos = kw_pos + 1
       end
-
-      local after_ws = text:sub(ws_end, ws_end)
-
-      -- Generic type parameter <T> - but not if it's an HTML tag
-      if after_ws == "<" then
-        -- Check if it looks like generic (has > before any space or <)
-        local rest = text:sub(ws_end + 1)
-        local generic_end = rest:find(">")
-        local space_before = rest:find("%s")
-        local lt_before = rest:find("<")
-
-        if generic_end and (not space_before or generic_end < space_before) and (not lt_before or generic_end < lt_before) then
-          local close = find_matching_close(text, ws_end + 1, "<", ">")
-          if close then
-            pos = close + 1
-          else
-            break
-          end
-        else
-          break
-        end
-      -- Opening brace { - C# block follows
-      elseif after_ws == "{" then
-        pos = ws_end
-        local close = find_matching_close(text, pos + 1, "{", "}")
-        if close then
-          pos = close + 1
-          -- After a block, check for else/catch/finally
-          while true do
-            -- Skip whitespace
-            while pos <= len and text:sub(pos, pos):match("%s") do
-              pos = pos + 1
-            end
-            local rest = text:sub(pos)
-            if rest:match("^else%s*if%s*%(") then
-              pos = pos + 4 -- skip "else"
-              while pos <= len and text:sub(pos, pos):match("%s") do
-                pos = pos + 1
-              end
-              pos = pos + 2 -- skip "if"
-              while pos <= len and text:sub(pos, pos):match("%s") do
-                pos = pos + 1
-              end
-              local paren_close = find_matching_close(text, pos + 1, "(", ")")
-              if paren_close then
-                pos = paren_close + 1
-                while pos <= len and text:sub(pos, pos):match("%s") do
-                  pos = pos + 1
-                end
-                if text:sub(pos, pos) == "{" then
-                  local brace_close = find_matching_close(text, pos + 1, "{", "}")
-                  if brace_close then
-                    pos = brace_close + 1
-                  else
-                    break
-                  end
-                else
-                  break
-                end
-              else
-                break
-              end
-            elseif rest:match("^else%s*{") then
-              pos = pos + 4 -- skip "else"
-              while pos <= len and text:sub(pos, pos):match("%s") do
-                pos = pos + 1
-              end
-              local brace_close = find_matching_close(text, pos + 1, "{", "}")
-              if brace_close then
-                pos = brace_close + 1
-              else
-                break
-              end
-            elseif rest:match("^catch%s*%(") then
-              pos = pos + 5 -- skip "catch"
-              while pos <= len and text:sub(pos, pos):match("%s") do
-                pos = pos + 1
-              end
-              local paren_close = find_matching_close(text, pos + 1, "(", ")")
-              if paren_close then
-                pos = paren_close + 1
-                while pos <= len and text:sub(pos, pos):match("%s") do
-                  pos = pos + 1
-                end
-                if text:sub(pos, pos) == "{" then
-                  local brace_close = find_matching_close(text, pos + 1, "{", "}")
-                  if brace_close then
-                    pos = brace_close + 1
-                  else
-                    break
-                  end
-                else
-                  break
-                end
-              else
-                break
-              end
-            elseif rest:match("^catch%s*{") then
-              pos = pos + 5 -- skip "catch"
-              while pos <= len and text:sub(pos, pos):match("%s") do
-                pos = pos + 1
-              end
-              local brace_close = find_matching_close(text, pos + 1, "{", "}")
-              if brace_close then
-                pos = brace_close + 1
-              else
-                break
-              end
-            elseif rest:match("^finally%s*{") then
-              pos = pos + 7 -- skip "finally"
-              while pos <= len and text:sub(pos, pos):match("%s") do
-                pos = pos + 1
-              end
-              local brace_close = find_matching_close(text, pos + 1, "{", "}")
-              if brace_close then
-                pos = brace_close + 1
-              else
-                break
-              end
-            else
-              break
-            end
-          end
-        end
-        break
-      -- Parentheses ( ) - method call or condition
-      elseif after_ws == "(" then
-        pos = ws_end
-        local close = find_matching_close(text, pos + 1, "(", ")")
-        if close then
-          pos = close + 1
-        else
-          break
-        end
-      -- Square brackets [ ] - indexer or attribute
-      elseif next_c == "[" then
-        local close = find_matching_close(text, pos + 1, "[", "]")
-        if close then
-          pos = close + 1
-        else
-          break
-        end
-      -- Dot . - member access (must be directly attached, no whitespace)
-      elseif next_c == "." then
-        pos = pos + 1
-        -- Consume next identifier
-        while pos <= len and text:sub(pos, pos):match("[%w_]") do
-          pos = pos + 1
-        end
-      else
-        break
+      kw_pos = kw_pos + 2 -- skip "if"
+      while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+        kw_pos = kw_pos + 1
       end
+      local paren_close = find_matching_close(text, kw_pos + 1, "(", ")")
+      if not paren_close then break end
+      kw_pos = paren_close + 1
+      while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+        kw_pos = kw_pos + 1
+      end
+      if text:sub(kw_pos, kw_pos) ~= "{" then break end
+      brace_close = find_matching_close(text, kw_pos + 1, "{", "}")
+      if not brace_close then break end
+      kw_pos = brace_close + 1
+
+    -- else
+    elseif rest:match("^else%s*{") then
+      kw_pos = kw_pos + 4 -- skip "else"
+      while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+        kw_pos = kw_pos + 1
+      end
+      brace_close = find_matching_close(text, kw_pos + 1, "{", "}")
+      if not brace_close then break end
+      kw_pos = brace_close + 1
+
+    -- catch with exception type
+    elseif rest:match("^catch%s*%(") then
+      kw_pos = kw_pos + 5 -- skip "catch"
+      while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+        kw_pos = kw_pos + 1
+      end
+      local paren_close = find_matching_close(text, kw_pos + 1, "(", ")")
+      if not paren_close then break end
+      kw_pos = paren_close + 1
+      while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+        kw_pos = kw_pos + 1
+      end
+      if text:sub(kw_pos, kw_pos) ~= "{" then break end
+      brace_close = find_matching_close(text, kw_pos + 1, "{", "}")
+      if not brace_close then break end
+      kw_pos = brace_close + 1
+
+    -- catch without exception type
+    elseif rest:match("^catch%s*{") then
+      kw_pos = kw_pos + 5 -- skip "catch"
+      while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+        kw_pos = kw_pos + 1
+      end
+      brace_close = find_matching_close(text, kw_pos + 1, "{", "}")
+      if not brace_close then break end
+      kw_pos = brace_close + 1
+
+    -- finally
+    elseif rest:match("^finally%s*{") then
+      kw_pos = kw_pos + 7 -- skip "finally"
+      while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+        kw_pos = kw_pos + 1
+      end
+      brace_close = find_matching_close(text, kw_pos + 1, "{", "}")
+      if not brace_close then break end
+      kw_pos = brace_close + 1
+
+    -- while (for do-while)
+    elseif identifier == "do" and rest:match("^while%s*%(") then
+      kw_pos = kw_pos + 5 -- skip "while"
+      while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+        kw_pos = kw_pos + 1
+      end
+      local paren_close = find_matching_close(text, kw_pos + 1, "(", ")")
+      if not paren_close then break end
+      kw_pos = paren_close + 1
+      -- Skip optional semicolon
+      while kw_pos <= len and text:sub(kw_pos, kw_pos):match("%s") do
+        kw_pos = kw_pos + 1
+      end
+      if text:sub(kw_pos, kw_pos) == ";" then
+        kw_pos = kw_pos + 1
+      end
+      break -- do-while is complete
+
+    else
+      break
     end
-
-    return pos - 1
   end
 
-  -- Unknown @ construct, just return the @
-  return start
+  return kw_pos - 1
+end
+
+--- Try to consume a Razor line directive starting at pos
+--- Returns end position if this is a line directive, nil otherwise
+---@param text string
+---@param pos number Position of the @
+---@return number|nil end_pos
+local function try_consume_line_directive(text, pos)
+  local len = #text
+  if pos > len or text:sub(pos, pos) ~= "@" then
+    return nil
+  end
+
+  local after_at = pos + 1
+  if after_at > len then
+    return nil
+  end
+
+  local c = text:sub(after_at, after_at)
+  if not c:match("[%a]") then
+    return nil
+  end
+
+  -- Consume identifier
+  local id_end = after_at
+  while id_end <= len and text:sub(id_end, id_end):match("[%w_]") do
+    id_end = id_end + 1
+  end
+  local identifier = text:sub(after_at, id_end - 1)
+  local identifier_lower = identifier:lower()
+
+  -- Directives must be lowercase (e.g., @model not @Model)
+  if identifier ~= identifier_lower then
+    return nil
+  end
+
+  if not LINE_DIRECTIVES[identifier_lower] then
+    return nil
+  end
+
+  -- Make sure it's not followed by . or ( which would make it an expression
+  local next_char = text:sub(id_end, id_end)
+  if next_char == "." or next_char == "(" or next_char == "[" then
+    return nil
+  end
+
+  -- Consume until end of line
+  local newline = text:find("\n", id_end)
+  if newline then
+    return newline - 1
+  end
+  return len
 end
 
 --- Tokenize HTML/Razor content
@@ -453,14 +542,26 @@ function M.tokenize(text)
   while pos <= len do
     local c = text:sub(pos, pos)
 
-    -- Razor construct
+    -- Try Razor control flow block first
     if c == "@" then
-      local end_pos = consume_razor(text, pos)
-      table.insert(tokens, { type = M.TOKEN_TYPES.RAZOR, content = text:sub(pos, end_pos) })
-      pos = end_pos + 1
+      local block_end = try_consume_control_flow(text, pos)
+      if block_end then
+        table.insert(tokens, { type = M.TOKEN_TYPES.RAZOR_BLOCK, content = text:sub(pos, block_end) })
+        pos = block_end + 1
+        goto continue
+      end
+
+      -- Try line directive
+      local line_end = try_consume_line_directive(text, pos)
+      if line_end then
+        table.insert(tokens, { type = M.TOKEN_TYPES.RAZOR_LINE, content = text:sub(pos, line_end) })
+        pos = line_end + 1
+        goto continue
+      end
+    end
 
     -- HTML comment
-    elseif text:sub(pos, pos + 3) == "<!--" then
+    if text:sub(pos, pos + 3) == "<!--" then
       local end_marker = text:find("-->", pos + 4, true)
       if end_marker then
         table.insert(tokens, { type = M.TOKEN_TYPES.COMMENT, content = text:sub(pos, end_marker + 2) })
@@ -469,9 +570,11 @@ function M.tokenize(text)
         table.insert(tokens, { type = M.TOKEN_TYPES.COMMENT, content = text:sub(pos) })
         break
       end
+      goto continue
+    end
 
     -- DOCTYPE
-    elseif text:sub(pos, pos + 8):upper() == "<!DOCTYPE" then
+    if text:sub(pos, pos + 8):upper() == "<!DOCTYPE" then
       local end_marker = text:find(">", pos, true)
       if end_marker then
         table.insert(tokens, { type = M.TOKEN_TYPES.DOCTYPE, content = text:sub(pos, end_marker) })
@@ -480,21 +583,29 @@ function M.tokenize(text)
         table.insert(tokens, { type = M.TOKEN_TYPES.DOCTYPE, content = text:sub(pos) })
         break
       end
+      goto continue
+    end
 
     -- Closing tag
-    elseif text:sub(pos, pos + 1) == "</" then
+    if text:sub(pos, pos + 1) == "</" then
       local end_marker = text:find(">", pos, true)
       if end_marker then
         local tag_name = text:sub(pos + 2, end_marker - 1):match("^%s*([%w%-]+)")
-        table.insert(tokens, { type = M.TOKEN_TYPES.TAG_CLOSE, tag = tag_name, content = text:sub(pos, end_marker) })
+        if tag_name then
+          table.insert(tokens, { type = M.TOKEN_TYPES.TAG_CLOSE, tag = tag_name, content = text:sub(pos, end_marker) })
+        else
+          table.insert(tokens, { type = M.TOKEN_TYPES.TEXT, content = text:sub(pos, end_marker) })
+        end
         pos = end_marker + 1
       else
         table.insert(tokens, { type = M.TOKEN_TYPES.TEXT, content = text:sub(pos) })
         break
       end
+      goto continue
+    end
 
-    -- Opening tag
-    elseif c == "<" and text:sub(pos + 1, pos + 1):match("[%a]") then
+    -- Opening tag (must start with letter after <)
+    if c == "<" and text:sub(pos + 1, pos + 1):match("[%a]") then
       -- Find end of tag, handling quoted attributes
       local tag_end = nil
       local search_pos = pos + 1
@@ -545,22 +656,38 @@ function M.tokenize(text)
         table.insert(tokens, { type = M.TOKEN_TYPES.TEXT, content = text:sub(pos) })
         break
       end
+      goto continue
+    end
 
-    -- Plain text
-    else
-      local next_special = text:find("[<@]", pos)
-      if next_special then
-        if next_special > pos then
-          table.insert(tokens, { type = M.TOKEN_TYPES.TEXT, content = text:sub(pos, next_special - 1) })
-        end
-        pos = next_special
-      else
-        if pos <= len then
-          table.insert(tokens, { type = M.TOKEN_TYPES.TEXT, content = text:sub(pos) })
-        end
+    -- Plain text - consume until next special character or end
+    -- Special characters: < (tags), @ (only if followed by control flow keyword or directive)
+    local text_end = pos
+    while text_end <= len do
+      local tc = text:sub(text_end, text_end)
+      if tc == "<" then
         break
+      elseif tc == "@" then
+        -- Check if this @ starts a control flow or line directive
+        if try_consume_control_flow(text, text_end) or try_consume_line_directive(text, text_end) then
+          break
+        end
+        -- Otherwise, @ is just text (inline expression like @User.Name)
+        text_end = text_end + 1
+      else
+        text_end = text_end + 1
       end
     end
+
+    if text_end > pos then
+      table.insert(tokens, { type = M.TOKEN_TYPES.TEXT, content = text:sub(pos, text_end - 1) })
+      pos = text_end
+    else
+      -- Safety: advance by 1 to prevent infinite loop
+      table.insert(tokens, { type = M.TOKEN_TYPES.TEXT, content = text:sub(pos, pos) })
+      pos = pos + 1
+    end
+
+    ::continue::
   end
 
   return tokens
@@ -586,18 +713,12 @@ function M.format(input, config)
     end
   end
 
-  local function add_lines(content)
-    -- Add content preserving its internal line structure
-    for line in content:gmatch("([^\n]*)\n?") do
-      if line ~= "" or content:find("\n") then
-        if line ~= "" then
-          add_line(line)
-        elseif #output > 0 then
-          -- Preserve blank lines within content
-          add_line("")
-        end
-      end
+  --- Check if token is inline (single line, no block structure)
+  local function is_inline(token)
+    if token.type == M.TOKEN_TYPES.TEXT then
+      return not token.content:find("\n")
     end
+    return false
   end
 
   local i = 1
@@ -611,8 +732,17 @@ function M.format(input, config)
     elseif token.type == M.TOKEN_TYPES.COMMENT then
       add_line(indent .. token.content)
 
-    elseif token.type == M.TOKEN_TYPES.RAZOR then
-      -- Preserve Razor constructs exactly, but handle indentation for multi-line
+    elseif token.type == M.TOKEN_TYPES.RAZOR_LINE then
+      -- Line directives at root level get no indent
+      local trimmed = token.content:match("^%s*(.-)%s*$")
+      if indent_level == 0 then
+        add_line(trimmed)
+      else
+        add_line(indent .. trimmed)
+      end
+
+    elseif token.type == M.TOKEN_TYPES.RAZOR_BLOCK then
+      -- Multi-line block - preserve internal structure, adjust base indentation
       local content = token.content
       local lines = {}
       for line in content:gmatch("[^\n]+") do
@@ -620,18 +750,41 @@ function M.format(input, config)
       end
 
       if #lines == 1 then
-        -- Single line - just add with current indent if it's a line-level directive
-        local trimmed = content:match("^%s*(.-)%s*$")
-        if trimmed:match("^@[%a_]") and not trimmed:match("{") then
-          -- Line directive like @inject, @using - no indent
-          add_line(trimmed)
-        else
-          add_line(indent .. trimmed)
-        end
+        add_line(indent .. content:match("^%s*(.-)%s*$"))
       else
-        -- Multi-line - preserve internal structure
-        for _, line in ipairs(lines) do
-          add_line(line)
+        -- The first line often has no leading whitespace because the preceding
+        -- whitespace was captured by the TEXT token. Use minimum indent of all
+        -- lines except the first as the base.
+        local min_indent = math.huge
+        for j = 2, #lines do
+          local line = lines[j]
+          if line:match("%S") then
+            local leading = #(line:match("^(%s*)") or "")
+            min_indent = math.min(min_indent, leading)
+          end
+        end
+        -- If all subsequent lines have more indent, use 0
+        if min_indent == math.huge then
+          min_indent = 0
+        end
+
+        -- Output each line, adjusting only the base indentation
+        for j, line in ipairs(lines) do
+          if line:match("%S") then
+            local line_indent = #(line:match("^(%s*)") or "")
+            local relative_indent
+            if j == 1 then
+              -- First line: no leading whitespace in token, output at current indent
+              relative_indent = 0
+            else
+              relative_indent = line_indent - min_indent
+              if relative_indent < 0 then relative_indent = 0 end
+            end
+            local stripped = line:match("^%s*(.-)%s*$")
+            add_line(indent .. string.rep(" ", relative_indent) .. stripped)
+          else
+            add_line("")
+          end
         end
       end
 
@@ -642,27 +795,63 @@ function M.format(input, config)
     elseif token.type == M.TOKEN_TYPES.TAG_OPEN then
       local tag_lower = token.tag:lower()
       local formatted = M.format_attributes_stacked(token.attributes, token.tag, indent, false, config)
-      add_line(indent .. formatted)
 
-      -- Check if this is a preserve-content element
-      if M.PRESERVE_CONTENT_ELEMENTS[tag_lower] then
+      -- Look ahead to see if this tag has only inline text content
+      local has_only_inline = true
+      local inline_parts = {}
+      local j = i + 1
+      local close_idx = nil
+
+      while j <= #tokens do
+        local t = tokens[j]
+        if t.type == M.TOKEN_TYPES.TAG_CLOSE and t.tag and t.tag:lower() == tag_lower then
+          close_idx = j
+          break
+        elseif t.type == M.TOKEN_TYPES.TAG_OPEN or t.type == M.TOKEN_TYPES.TAG_SELF_CLOSE or
+               t.type == M.TOKEN_TYPES.RAZOR_BLOCK then
+          has_only_inline = false
+          break
+        elseif is_inline(t) then
+          local part = t.content:match("^%s*(.-)%s*$")
+          if part and part ~= "" then
+            table.insert(inline_parts, part)
+          end
+          j = j + 1
+        else
+          has_only_inline = false
+          break
+        end
+      end
+
+      if has_only_inline and close_idx and #inline_parts > 0 then
+        -- Single line: <tag>content</tag>
+        local inline_content = table.concat(inline_parts, " ")
+        add_line(indent .. formatted .. inline_content .. "</" .. token.tag .. ">")
+        i = close_idx
+      elseif has_only_inline and close_idx and #inline_parts == 0 then
+        -- Empty tag
+        add_line(indent .. formatted .. "</" .. token.tag .. ">")
+        i = close_idx
+      elseif M.PRESERVE_CONTENT_ELEMENTS[tag_lower] then
+        -- Preserve content exactly (script, style, pre, textarea)
         local content_parts = {}
-        i = i + 1
-        while i <= #tokens do
-          local next_token = tokens[i]
+        local content_start = i + 1
+        local content_end = content_start
+        while content_end <= #tokens do
+          local next_token = tokens[content_end]
           if next_token.type == M.TOKEN_TYPES.TAG_CLOSE and next_token.tag and next_token.tag:lower() == tag_lower then
             break
           end
           table.insert(content_parts, next_token.content)
-          i = i + 1
+          content_end = content_end + 1
         end
-        if #content_parts > 0 then
-          add_line(table.concat(content_parts))
-        end
-        if i <= #tokens then
-          add_line(indent .. "</" .. tokens[i].tag .. ">")
-        end
+        -- Output opening tag + content + closing tag, preserving exact content
+        local preserved_content = table.concat(content_parts)
+        add_line(indent .. formatted .. preserved_content .. "</" .. token.tag .. ">")
+        i = content_end
       else
+        -- Block tag
+        add_line(indent .. formatted)
         indent_level = indent_level + 1
       end
 
@@ -672,8 +861,7 @@ function M.format(input, config)
       add_line(indent .. "</" .. token.tag .. ">")
 
     elseif token.type == M.TOKEN_TYPES.TEXT then
-      local text = token.content
-      local trimmed = text:match("^%s*(.-)%s*$")
+      local trimmed = token.content:match("^%s*(.-)%s*$")
       if trimmed and trimmed ~= "" then
         add_line(indent .. trimmed)
       end

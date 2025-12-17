@@ -127,11 +127,13 @@ require("conform").setup({
 The HTML formatter uses JetBrains Rider-style defaults:
 
 **Before:**
+
 ```html
 <div class="container" id="main" data-value="123" @onclick="HandleClick">
 ```
 
 **After:**
+
 ```html
 <div class="container"
      id="main"
@@ -148,6 +150,7 @@ The HTML formatter uses JetBrains Rider-style defaults:
 C# code inside `@code{}` blocks is formatted using CSharpier with proper indentation.
 
 **Before:**
+
 ```razor
 @code {
 private int count=0;
@@ -156,6 +159,7 @@ private void IncrementCount(){count++;}
 ```
 
 **After:**
+
 ```razor
 @code {
     private int count = 0;
