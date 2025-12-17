@@ -836,6 +836,7 @@ function M.format(input, config)
   local had_first_tag = false  -- Track if we've seen the first HTML tag at root level
   local last_was_razor_block = false  -- Track if previous output was a Razor block
   local just_opened_tag = false  -- Track if we just opened a block tag (to avoid blank line as first child)
+  local last_element_indent = -1  -- Track indent level of last completed element for sibling spacing
 
   local function get_indent()
     return string.rep(indent_str, indent_level)
@@ -953,6 +954,10 @@ function M.format(input, config)
         add_blank_line()
         last_was_razor_block = false
       end
+      -- Add blank line between sibling elements at the same level
+      if last_element_indent == indent_level and not just_opened_tag then
+        add_blank_line()
+      end
       -- Add blank line before first HTML tag if we had directives
       if had_directive and not had_first_tag and indent_level == 0 then
         add_blank_line()
@@ -961,12 +966,17 @@ function M.format(input, config)
       just_opened_tag = false
       local formatted = M.format_attributes_stacked(token.attributes, token.tag, indent, true, config)
       add_line(indent .. formatted)
+      last_element_indent = indent_level  -- Mark that we completed an element at this level
 
     elseif token.type == M.TOKEN_TYPES.TAG_OPEN then
       -- Add blank line after previous Razor block
       if last_was_razor_block then
         add_blank_line()
         last_was_razor_block = false
+      end
+      -- Add blank line between sibling elements at the same level
+      if last_element_indent == indent_level and not just_opened_tag then
+        add_blank_line()
       end
       -- Add blank line before first HTML tag if we had directives
       if had_directive and not had_first_tag and indent_level == 0 then
@@ -1009,10 +1019,12 @@ function M.format(input, config)
         local inline_content = table.concat(inline_parts, " ")
         add_line(indent .. formatted .. inline_content .. "</" .. token.tag .. ">")
         i = close_idx
+        last_element_indent = indent_level  -- Mark that we completed an element at this level
       elseif has_only_inline and close_idx and #inline_parts == 0 then
         -- Empty tag
         add_line(indent .. formatted .. "</" .. token.tag .. ">")
         i = close_idx
+        last_element_indent = indent_level  -- Mark that we completed an element at this level
       elseif M.PRESERVE_CONTENT_ELEMENTS[tag_lower] then
         -- Preserve content exactly (script, style, pre, textarea)
         local content_parts = {}
@@ -1030,11 +1042,13 @@ function M.format(input, config)
         local preserved_content = table.concat(content_parts)
         add_line(indent .. formatted .. preserved_content .. "</" .. token.tag .. ">")
         i = content_end
+        last_element_indent = indent_level  -- Mark that we completed an element at this level
       else
         -- Block tag
         add_line(indent .. formatted)
         indent_level = indent_level + 1
         just_opened_tag = true
+        last_element_indent = -1  -- Reset since we're going deeper
       end
 
     elseif token.type == M.TOKEN_TYPES.TAG_CLOSE then
@@ -1044,6 +1058,7 @@ function M.format(input, config)
       indent_level = math.max(0, indent_level - 1)
       indent = get_indent()
       add_line(indent .. "</" .. token.tag .. ">")
+      last_element_indent = indent_level  -- Mark that we completed an element at this level
 
     elseif token.type == M.TOKEN_TYPES.TEXT then
       -- Add blank line after previous Razor block (only if this text has content)

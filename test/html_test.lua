@@ -293,7 +293,7 @@ test("Blazor component with attributes",
 
 test("Full page structure",
   "@page \"/test\"\n@inject IService Svc\n\n<div class=\"container\">\n    <h1>Title</h1>\n    <p>@Model.Description</p>\n</div>",
-  "@page \"/test\"\n@inject IService Svc\n\n<div class=\"container\">\n    <h1>Title</h1>\n    <p>@Model.Description</p>\n</div>")
+  "@page \"/test\"\n@inject IService Svc\n\n<div class=\"container\">\n    <h1>Title</h1>\n\n    <p>@Model.Description</p>\n</div>")
 
 print("\n=== EDGE CASE TESTS ===\n")
 
@@ -376,6 +376,7 @@ test("Complex MudBlazor component",
     <TitleContent>
         <MudText Typo="Typo.h6">@Title</MudText>
     </TitleContent>
+
     <DialogContent>
         @ChildContent
     </DialogContent>
@@ -411,7 +412,7 @@ test("HTML comment preserved",
 -- Void elements
 test("Multiple void elements",
   "<div><br /><hr /><input type=\"text\" /></div>",
-  "<div>\n    <br />\n    <hr />\n    <input type=\"text\" />\n</div>")
+  "<div>\n    <br />\n\n    <hr />\n\n    <input type=\"text\" />\n</div>")
 
 -- Pre tag preserves content
 test("Pre tag preserves whitespace",
@@ -443,6 +444,15 @@ test("Complex Func expression in attribute",
 test("Multiple attributes with Razor expressions",
   [[<Column Property="x => x.Name" Title="@Localizer["Name"]" Hidden="@(IsHidden("Name"))">content</Column>]],
   "<Column Property=\"x => x.Name\"\n        Title=\"@Localizer[\"Name\"]\"\n        Hidden=\"@(IsHidden(\"Name\"))\">content</Column>")
+
+-- Sibling element spacing
+test("Sibling self-closing elements have blank lines between them",
+  [[<Columns><PropertyColumn Title="A" /><PropertyColumn Title="B" /><PropertyColumn Title="C" /></Columns>]],
+  "<Columns>\n    <PropertyColumn Title=\"A\" />\n\n    <PropertyColumn Title=\"B\" />\n\n    <PropertyColumn Title=\"C\" />\n</Columns>")
+
+test("Sibling block elements have blank lines between them",
+  [[<div><header>H</header><main>M</main><footer>F</footer></div>]],
+  "<div>\n    <header>H</header>\n\n    <main>M</main>\n\n    <footer>F</footer>\n</div>")
 
 print("\n=== SUMMARY ===")
 print("Passed: " .. tests_passed)
