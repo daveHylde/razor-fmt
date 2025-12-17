@@ -146,7 +146,7 @@ function M.setup(opts)
   end, { desc = "Format Razor file with CSharpier and HTML formatter" })
 
   vim.api.nvim_create_autocmd("FileType", {
-    pattern = { "razor" },
+    pattern = { "razor", "cshtml" },
     callback = function(ev)
       vim.keymap.set("n", "<leader>fr", function()
         M.format_buffer(ev.buf)
@@ -160,7 +160,7 @@ end
 function M.get_conform_formatter()
   return {
     meta = {
-      url = "https://github.com/davidosomething/razor-fmt",
+      url = "https://github.com/daveHylde/razor-fmt",
       description = "Razor formatter: CSharpier for @code{} blocks, opinionated HTML formatter",
     },
     format = function(_, _, lines, callback)
