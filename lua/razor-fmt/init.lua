@@ -224,39 +224,148 @@ function M.format(input)
   return table.concat(result_lines, "\n"), nil
 end
 
---- Format HTML range using LSP
+--- Find the HTML LSP client attached to the buffer
 ---@param bufnr number
----@param start_line number 0-indexed
----@param end_line number 0-indexed (exclusive)
----@param callback fun()
-local function format_html_range_with_lsp(bufnr, start_line, end_line, callback)
+---@return table|nil
+local function get_html_client(bufnr)
   local clients = vim.lsp.get_clients({ bufnr = bufnr })
-  local html_client = nil
   for _, client in ipairs(clients) do
     if client.name == "html" or client.name == "vscode-html-language-server" or client.name == "htmlls" then
-      html_client = client
-      break
+      return client
     end
   end
+  return nil
+end
 
+--- Find all HTML/template regions (lines not inside @code{} blocks)
+--- Returns a list of { start_line, end_line } tables (1-indexed, inclusive)
+---@param lines string[]
+---@param code_blocks table[]
+---@return table[]
+local function find_html_regions(lines, code_blocks)
+  local regions = {}
+  local total_lines = #lines
+
+  if total_lines == 0 then
+    return regions
+  end
+
+  -- Sort code blocks by start line
+  local sorted_blocks = vim.deepcopy(code_blocks)
+  table.sort(sorted_blocks, function(a, b)
+    return a.start_line < b.start_line
+  end)
+
+  local current_line = 1
+
+  for _, block in ipairs(sorted_blocks) do
+    -- Add HTML region before this code block
+    if current_line < block.start_line then
+      table.insert(regions, {
+        start_line = current_line,
+        end_line = block.start_line - 1,
+      })
+    end
+    current_line = block.end_line + 1
+  end
+
+  -- Add HTML region after the last code block
+  if current_line <= total_lines then
+    table.insert(regions, {
+      start_line = current_line,
+      end_line = total_lines,
+    })
+  end
+
+  return regions
+end
+
+--- Format a single HTML region using LSP
+---@param bufnr number
+---@param html_client table
+---@param start_line number 1-indexed
+---@param end_line number 1-indexed (inclusive)
+---@param callback fun(err: string|nil)
+local function format_html_region(bufnr, html_client, start_line, end_line, callback)
+  -- Get the text for this region
+  local lines = vim.api.nvim_buf_get_lines(bufnr, start_line - 1, end_line, false)
+  local text = table.concat(lines, "\n")
+
+  -- Skip empty regions
+  if text:match("^%s*$") then
+    callback(nil)
+    return
+  end
+
+  local params = {
+    textDocument = vim.lsp.util.make_text_document_params(bufnr),
+    range = {
+      start = { line = start_line - 1, character = 0 },
+      ["end"] = { line = end_line - 1, character = #lines[#lines] },
+    },
+    options = {
+      tabSize = vim.bo[bufnr].tabstop,
+      insertSpaces = vim.bo[bufnr].expandtab,
+    },
+  }
+
+  html_client.request("textDocument/rangeFormatting", params, function(err, result)
+    if err then
+      callback("HTML LSP error: " .. tostring(err))
+      return
+    end
+
+    if result and #result > 0 then
+      vim.lsp.util.apply_text_edits(result, bufnr, html_client.offset_encoding or "utf-16")
+    end
+
+    callback(nil)
+  end, bufnr)
+end
+
+--- Format all HTML regions sequentially
+---@param bufnr number
+---@param callback fun()
+local function format_html_regions(bufnr, callback)
+  local html_client = get_html_client(bufnr)
   if not html_client then
     callback()
     return
   end
 
-  vim.lsp.buf.format({
-    bufnr = bufnr,
-    async = true,
-    range = {
-      ["start"] = { start_line + 1, 0 },
-      ["end"] = { end_line, 0 },
-    },
-    filter = function(client)
-      return client.name == html_client.name
-    end,
-  })
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  local code_blocks = find_code_blocks(lines)
+  local html_regions = find_html_regions(lines, code_blocks)
 
-  vim.defer_fn(callback, 100)
+  if #html_regions == 0 then
+    callback()
+    return
+  end
+
+  -- Format regions in reverse order to preserve line numbers
+  table.sort(html_regions, function(a, b)
+    return a.start_line > b.start_line
+  end)
+
+  local function format_next(index)
+    if index > #html_regions then
+      callback()
+      return
+    end
+
+    local region = html_regions[index]
+    format_html_region(bufnr, html_client, region.start_line, region.end_line, function(err)
+      if err then
+        vim.notify(err, vim.log.levels.WARN)
+      end
+      -- Small delay to let LSP process edits before next region
+      vim.defer_fn(function()
+        format_next(index + 1)
+      end, 50)
+    end)
+  end
+
+  format_next(1)
 end
 
 --- Format the current buffer (with optional HTML LSP support)
@@ -277,33 +386,9 @@ function M.format_buffer(bufnr)
     vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, new_lines)
 
     if M.config.format_html then
-      local code_blocks = find_code_blocks(new_lines)
-
-      if #code_blocks == 0 then
-        format_html_range_with_lsp(bufnr, 0, #new_lines, function()
-          vim.notify("Razor file formatted", vim.log.levels.INFO)
-        end)
-      else
-        local first_block = code_blocks[1]
-        for _, block in ipairs(code_blocks) do
-          if block.start_line < first_block.start_line then
-            first_block = block
-          end
-        end
-
-        if first_block.start_line > 1 then
-          local html_end_line = first_block.start_line - 2
-          if html_end_line >= 1 then
-            format_html_range_with_lsp(bufnr, 0, html_end_line, function()
-              vim.notify("Razor file formatted", vim.log.levels.INFO)
-            end)
-          else
-            vim.notify("Razor file formatted", vim.log.levels.INFO)
-          end
-        else
-          vim.notify("Razor file formatted", vim.log.levels.INFO)
-        end
-      end
+      format_html_regions(bufnr, function()
+        vim.notify("Razor file formatted", vim.log.levels.INFO)
+      end)
     else
       vim.notify("Razor file formatted", vim.log.levels.INFO)
     end
