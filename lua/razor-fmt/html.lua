@@ -908,11 +908,8 @@ function M.format(input, config)
       end
 
     elseif token.type == M.TOKEN_TYPES.TAG_CLOSE then
-      -- Add blank line after previous Razor block
-      if last_was_razor_block then
-        add_blank_line()
-        last_was_razor_block = false
-      end
+      -- Don't add blank line before closing tag, just reset the flag
+      last_was_razor_block = false
       just_opened_tag = false
       indent_level = math.max(0, indent_level - 1)
       indent = get_indent()

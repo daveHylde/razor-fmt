@@ -293,7 +293,7 @@ test("Blazor component with attributes",
 
 test("Full page structure",
   "@page \"/test\"\n@inject IService Svc\n\n<div class=\"container\">\n    <h1>Title</h1>\n    <p>@Model.Description</p>\n</div>",
-  "@page \"/test\"\n@inject IService Svc\n<div class=\"container\">\n    <h1>Title</h1>\n    <p>@Model.Description</p>\n</div>")
+  "@page \"/test\"\n@inject IService Svc\n\n<div class=\"container\">\n    <h1>Title</h1>\n    <p>@Model.Description</p>\n</div>")
 
 print("\n=== EDGE CASE TESTS ===\n")
 
@@ -384,8 +384,7 @@ test("Complex MudBlazor component",
 -- Complex attributes with lambdas should not break
 test("Lambda in attribute stays intact",
   [[<MudDynamicTabs CloseTab="@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))" KeepPanelsAlive>content</MudDynamicTabs>]],
-  [[<MudDynamicTabs CloseTab="@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))"
-                   KeepPanelsAlive>content</MudDynamicTabs>]])
+  "<MudDynamicTabs CloseTab=\"@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))\"\n                KeepPanelsAlive>content</MudDynamicTabs>")
 
 -- @for inside component
 test("@for block inside component",
@@ -418,6 +417,15 @@ test("Multiple void elements",
 test("Pre tag preserves whitespace",
   "<pre>  line1\n    line2\n  line3</pre>",
   "<pre>  line1\n    line2\n  line3</pre>")
+
+-- Blank lines around Razor blocks
+test("Blank line before Razor block with content before",
+  "<div>\n    <span>Before</span>\n    @if (x) { y }\n    <span>After</span>\n</div>",
+  "<div>\n    <span>Before</span>\n\n    @if (x) { y }\n\n    <span>After</span>\n</div>")
+
+test("No blank line when Razor block is first child",
+  "<div>\n    @if (x) { y }\n    <span>After</span>\n</div>",
+  "<div>\n    @if (x) { y }\n\n    <span>After</span>\n</div>")
 
 print("\n=== SUMMARY ===")
 print("Passed: " .. tests_passed)
