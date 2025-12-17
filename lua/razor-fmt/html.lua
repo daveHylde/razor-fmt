@@ -702,6 +702,10 @@ function M.format(input, config)
   local output = {}
   local indent_level = 0
   local indent_str = string.rep(" ", config.indent_size)
+  local had_directive = false  -- Track if we've seen a directive at root level
+  local had_first_tag = false  -- Track if we've seen the first HTML tag at root level
+  local last_was_razor_block = false  -- Track if previous output was a Razor block
+  local just_opened_tag = false  -- Track if we just opened a block tag (to avoid blank line as first child)
 
   local function get_indent()
     return string.rep(indent_str, indent_level)
@@ -713,10 +717,25 @@ function M.format(input, config)
     end
   end
 
+  local function add_blank_line()
+    -- Add blank line only if last line wasn't already blank
+    if #output > 0 and output[#output] ~= "" then
+      table.insert(output, "")
+    end
+  end
+
   --- Check if token is inline (single line, no block structure)
   local function is_inline(token)
     if token.type == M.TOKEN_TYPES.TEXT then
       return not token.content:find("\n")
+    end
+    return false
+  end
+
+  --- Check if token is whitespace-only TEXT
+  local function is_whitespace_only(token)
+    if token.type == M.TOKEN_TYPES.TEXT then
+      return token.content:match("^%s*$") ~= nil
     end
     return false
   end
@@ -737,11 +756,18 @@ function M.format(input, config)
       local trimmed = token.content:match("^%s*(.-)%s*$")
       if indent_level == 0 then
         add_line(trimmed)
+        had_directive = true
       else
         add_line(indent .. trimmed)
       end
 
     elseif token.type == M.TOKEN_TYPES.RAZOR_BLOCK then
+      -- Add blank line before Razor block (if there's content before it and not first child)
+      if #output > 0 and not just_opened_tag then
+        add_blank_line()
+      end
+      just_opened_tag = false
+
       -- Multi-line block - preserve internal structure, adjust base indentation
       local content = token.content
       local lines = {}
@@ -788,11 +814,36 @@ function M.format(input, config)
         end
       end
 
+      -- Mark that we just output a Razor block (for adding blank line after)
+      last_was_razor_block = true
+
     elseif token.type == M.TOKEN_TYPES.TAG_SELF_CLOSE then
+      -- Add blank line after previous Razor block
+      if last_was_razor_block then
+        add_blank_line()
+        last_was_razor_block = false
+      end
+      -- Add blank line before first HTML tag if we had directives
+      if had_directive and not had_first_tag and indent_level == 0 then
+        add_blank_line()
+        had_first_tag = true
+      end
+      just_opened_tag = false
       local formatted = M.format_attributes_stacked(token.attributes, token.tag, indent, true, config)
       add_line(indent .. formatted)
 
     elseif token.type == M.TOKEN_TYPES.TAG_OPEN then
+      -- Add blank line after previous Razor block
+      if last_was_razor_block then
+        add_blank_line()
+        last_was_razor_block = false
+      end
+      -- Add blank line before first HTML tag if we had directives
+      if had_directive and not had_first_tag and indent_level == 0 then
+        add_blank_line()
+        had_first_tag = true
+      end
+      just_opened_tag = false
       local tag_lower = token.tag:lower()
       local formatted = M.format_attributes_stacked(token.attributes, token.tag, indent, false, config)
 
@@ -853,17 +904,33 @@ function M.format(input, config)
         -- Block tag
         add_line(indent .. formatted)
         indent_level = indent_level + 1
+        just_opened_tag = true
       end
 
     elseif token.type == M.TOKEN_TYPES.TAG_CLOSE then
+      -- Add blank line after previous Razor block
+      if last_was_razor_block then
+        add_blank_line()
+        last_was_razor_block = false
+      end
+      just_opened_tag = false
       indent_level = math.max(0, indent_level - 1)
       indent = get_indent()
       add_line(indent .. "</" .. token.tag .. ">")
 
     elseif token.type == M.TOKEN_TYPES.TEXT then
+      -- Add blank line after previous Razor block (only if this text has content)
       local trimmed = token.content:match("^%s*(.-)%s*$")
       if trimmed and trimmed ~= "" then
+        if last_was_razor_block then
+          add_blank_line()
+          last_was_razor_block = false
+        end
+        just_opened_tag = false
         add_line(indent .. trimmed)
+      else
+        -- Whitespace-only text doesn't reset just_opened_tag
+        last_was_razor_block = false
       end
     end
 

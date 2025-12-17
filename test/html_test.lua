@@ -381,6 +381,25 @@ test("Complex MudBlazor component",
     </DialogContent>
 </MudDialog>]])
 
+-- Complex attributes with lambdas should not break
+test("Lambda in attribute stays intact",
+  [[<MudDynamicTabs CloseTab="@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))" KeepPanelsAlive>content</MudDynamicTabs>]],
+  [[<MudDynamicTabs CloseTab="@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))"
+                   KeepPanelsAlive>content</MudDynamicTabs>]])
+
+-- @for inside component
+test("@for block inside component",
+  [[<div>
+    @for(var i = 0; i < 10; i++){
+        <span>@i</span>
+    }
+</div>]],
+  [[<div>
+    @for(var i = 0; i < 10; i++){
+        <span>@i</span>
+    }
+</div>]])
+
 -- HTML comment
 test_tokenize("HTML comment",
   "<!-- comment -->",
