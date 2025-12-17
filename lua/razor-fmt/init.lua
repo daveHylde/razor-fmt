@@ -153,6 +153,15 @@ function M.setup(opts)
       end, { buffer = ev.buf, desc = "Format Razor file" })
     end,
   })
+
+  -- Auto-register with conform.nvim if available
+  local has_conform, conform = pcall(require, "conform")
+  if has_conform then
+    conform.formatters.razor_fmt = M.get_conform_formatter()
+    -- Auto-register filetypes
+    conform.formatters_by_ft.razor = conform.formatters_by_ft.razor or { "razor_fmt" }
+    conform.formatters_by_ft.cshtml = conform.formatters_by_ft.cshtml or { "razor_fmt" }
+  end
 end
 
 --- Get conform.nvim formatter specification

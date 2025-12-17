@@ -107,16 +107,15 @@ local formatted, err = require("razor-fmt").format(razor_content)
 
 ## conform.nvim Integration
 
-To use with [conform.nvim](https://github.com/stevearc/conform.nvim):
+The plugin auto-registers with [conform.nvim](https://github.com/stevearc/conform.nvim) if it's available. No additional configuration needed.
+
+To disable auto-registration or use custom filetypes, configure conform manually:
 
 ```lua
 require("conform").setup({
   formatters_by_ft = {
     razor = { "razor_fmt" },
     cshtml = { "razor_fmt" },
-  },
-  formatters = {
-    razor_fmt = require("razor-fmt").get_conform_formatter(),
   },
 })
 ```
