@@ -8,7 +8,7 @@ local html = require("razor-fmt.html")
 local config = {
   indent_size = 4,
   max_attributes_per_line = 1,
-  align_attributes = true,
+  align_attributes = false,
 }
 
 local tests_passed = 0
@@ -241,7 +241,7 @@ test("Self-closing tag",
 -- Attribute stacking
 test("Multiple attributes stack",
   "<div class=\"foo\" id=\"bar\">content</div>",
-  "<div class=\"foo\"\n     id=\"bar\">content</div>")
+  "<div class=\"foo\"\n    id=\"bar\">content</div>")
 
 test("Single attribute no stack",
   "<div class=\"foo\">content</div>",
@@ -289,7 +289,7 @@ test("Indexer expression",
 -- Complex real-world examples
 test("Blazor component with attributes",
   "<MudButton Variant=\"Variant.Filled\" Color=\"Color.Primary\" OnClick=\"HandleClick\">Click Me</MudButton>",
-  "<MudButton Variant=\"Variant.Filled\"\n           Color=\"Color.Primary\"\n           OnClick=\"HandleClick\">Click Me</MudButton>")
+  "<MudButton Variant=\"Variant.Filled\"\n    Color=\"Color.Primary\"\n    OnClick=\"HandleClick\">Click Me</MudButton>")
 
 test("Full page structure",
   "@page \"/test\"\n@inject IService Svc\n\n<div class=\"container\">\n    <h1>Title</h1>\n    <p>@Model.Description</p>\n</div>",
@@ -355,7 +355,7 @@ test("Blazor @bind",
 
 test("Blazor @bind:event",
   "<input @bind=\"searchText\" @bind:event=\"oninput\" />",
-  "<input @bind=\"searchText\"\n       @bind:event=\"oninput\" />")
+  "<input @bind=\"searchText\"\n    @bind:event=\"oninput\" />")
 
 -- ref attribute
 test("Blazor @ref",
@@ -384,7 +384,7 @@ test("Complex MudBlazor component",
 -- Complex attributes with lambdas should not break
 test("Lambda in attribute stays intact",
   [[<MudDynamicTabs CloseTab="@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))" KeepPanelsAlive>content</MudDynamicTabs>]],
-  "<MudDynamicTabs CloseTab=\"@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))\"\n                KeepPanelsAlive>content</MudDynamicTabs>")
+  "<MudDynamicTabs CloseTab=\"@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))\"\n    KeepPanelsAlive>content</MudDynamicTabs>")
 
 -- @for inside component
 test("@for block inside component",
@@ -442,7 +442,7 @@ test("Complex Func expression in attribute",
 
 test("Multiple attributes with Razor expressions",
   [[<Column Property="x => x.Name" Title="@Localizer["Name"]" Hidden="@(IsHidden("Name"))">content</Column>]],
-  "<Column Property=\"x => x.Name\"\n        Title=\"@Localizer[\"Name\"]\"\n        Hidden=\"@(IsHidden(\"Name\"))\">content</Column>")
+  "<Column Property=\"x => x.Name\"\n    Title=\"@Localizer[\"Name\"]\"\n    Hidden=\"@(IsHidden(\"Name\"))\">content</Column>")
 
 -- Sibling element spacing (JetBrains style: no blank lines between siblings)
 test("Sibling self-closing elements no blank lines",
