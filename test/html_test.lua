@@ -427,6 +427,23 @@ test("No blank line when Razor block is first child",
   "<div>\n    @if (x) { y }\n    <span>After</span>\n</div>",
   "<div>\n    @if (x) { y }\n\n    <span>After</span>\n</div>")
 
+-- Razor expressions with nested quotes in attributes
+test("Localizer in attribute value",
+  [[<PropertyColumn Title="@Localizer["Status"]">content</PropertyColumn>]],
+  [[<PropertyColumn Title="@Localizer["Status"]">content</PropertyColumn>]])
+
+test("Parenthesized expression with nested quotes",
+  [[<PropertyColumn Hidden="@(ColumnIsHidden("Name"))">content</PropertyColumn>]],
+  [[<PropertyColumn Hidden="@(ColumnIsHidden("Name"))">content</PropertyColumn>]])
+
+test("Complex Func expression in attribute",
+  [[<MudDataGrid ServerData="@(new Func<GridState<T>, Task<GridData<T>>>(GetData))">content</MudDataGrid>]],
+  [[<MudDataGrid ServerData="@(new Func<GridState<T>, Task<GridData<T>>>(GetData))">content</MudDataGrid>]])
+
+test("Multiple attributes with Razor expressions",
+  [[<Column Property="x => x.Name" Title="@Localizer["Name"]" Hidden="@(IsHidden("Name"))">content</Column>]],
+  "<Column Property=\"x => x.Name\"\n        Title=\"@Localizer[\"Name\"]\"\n        Hidden=\"@(IsHidden(\"Name\"))\">content</Column>")
+
 print("\n=== SUMMARY ===")
 print("Passed: " .. tests_passed)
 print("Failed: " .. tests_failed)

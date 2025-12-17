@@ -112,14 +112,144 @@ function M.parse_attributes(attr_string)
       local quote = attr_string:sub(pos, pos)
       if quote == '"' or quote == "'" then
         pos = pos + 1
-        local value_end = attr_string:find(quote, pos, true)
+        -- Find the closing quote, but handle Razor expressions with nested quotes
+        local value_start = pos
+        local value_end = nil
+        
+        while pos <= len do
+          local c = attr_string:sub(pos, pos)
+          
+          if c == quote then
+            -- Found potential closing quote
+            value_end = pos - 1
+            pos = pos + 1
+            break
+          elseif c == "@" then
+            -- Razor expression - need to handle nested constructs
+            pos = pos + 1
+            if pos <= len then
+              local next_c = attr_string:sub(pos, pos)
+              if next_c == "(" then
+                -- @(...) - skip to matching paren
+                pos = pos + 1
+                local depth = 1
+                local in_string = nil
+                while pos <= len and depth > 0 do
+                  local pc = attr_string:sub(pos, pos)
+                  if in_string then
+                    if pc == in_string and attr_string:sub(pos - 1, pos - 1) ~= "\\" then
+                      in_string = nil
+                    end
+                  else
+                    if pc == '"' or pc == "'" then
+                      in_string = pc
+                    elseif pc == "(" then
+                      depth = depth + 1
+                    elseif pc == ")" then
+                      depth = depth - 1
+                    end
+                  end
+                  pos = pos + 1
+                end
+              elseif next_c == "[" then
+                -- @[...] - indexer at start, skip to matching bracket
+                pos = pos + 1
+                local depth = 1
+                local in_string = nil
+                while pos <= len and depth > 0 do
+                  local bc = attr_string:sub(pos, pos)
+                  if in_string then
+                    if bc == in_string and attr_string:sub(pos - 1, pos - 1) ~= "\\" then
+                      in_string = nil
+                    end
+                  else
+                    if bc == '"' or bc == "'" then
+                      in_string = bc
+                    elseif bc == "[" then
+                      depth = depth + 1
+                    elseif bc == "]" then
+                      depth = depth - 1
+                    end
+                  end
+                  pos = pos + 1
+                end
+              elseif next_c:match("[%a_]") then
+                -- @Identifier - consume identifier then check for indexer/call
+                while pos <= len and attr_string:sub(pos, pos):match("[%w_]") do
+                  pos = pos + 1
+                end
+                -- Check for chained member access, indexers, or method calls
+                while pos <= len do
+                  local chain_c = attr_string:sub(pos, pos)
+                  if chain_c == "." then
+                    -- Member access - consume next identifier
+                    pos = pos + 1
+                    while pos <= len and attr_string:sub(pos, pos):match("[%w_]") do
+                      pos = pos + 1
+                    end
+                  elseif chain_c == "[" then
+                    -- Indexer - skip to matching bracket
+                    pos = pos + 1
+                    local depth = 1
+                    local in_string = nil
+                    while pos <= len and depth > 0 do
+                      local bc = attr_string:sub(pos, pos)
+                      if in_string then
+                        if bc == in_string and attr_string:sub(pos - 1, pos - 1) ~= "\\" then
+                          in_string = nil
+                        end
+                      else
+                        if bc == '"' or bc == "'" then
+                          in_string = bc
+                        elseif bc == "[" then
+                          depth = depth + 1
+                        elseif bc == "]" then
+                          depth = depth - 1
+                        end
+                      end
+                      pos = pos + 1
+                    end
+                  elseif chain_c == "(" then
+                    -- Method call - skip to matching paren
+                    pos = pos + 1
+                    local depth = 1
+                    local in_string = nil
+                    while pos <= len and depth > 0 do
+                      local pc = attr_string:sub(pos, pos)
+                      if in_string then
+                        if pc == in_string and attr_string:sub(pos - 1, pos - 1) ~= "\\" then
+                          in_string = nil
+                        end
+                      else
+                        if pc == '"' or pc == "'" then
+                          in_string = pc
+                        elseif pc == "(" then
+                          depth = depth + 1
+                        elseif pc == ")" then
+                          depth = depth - 1
+                        end
+                      end
+                      pos = pos + 1
+                    end
+                  else
+                    break
+                  end
+                end
+              else
+                -- Just @ followed by something else, continue
+              end
+            end
+          else
+            pos = pos + 1
+          end
+        end
+        
         if value_end then
-          local value = attr_string:sub(pos, value_end - 1)
+          local value = attr_string:sub(value_start, value_end)
           table.insert(attrs, { name = name, value = value, quote = quote })
-          pos = value_end + 1
         else
           -- Unclosed quote, take rest
-          local value = attr_string:sub(pos)
+          local value = attr_string:sub(value_start)
           table.insert(attrs, { name = name, value = value, quote = quote })
           break
         end
