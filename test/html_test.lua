@@ -239,9 +239,13 @@ test("Self-closing tag",
   "<input type=\"text\" />")
 
 -- Attribute stacking
-test("Multiple attributes stack",
+test("Multiple attributes stack on block element",
+  "<div class=\"foo\" id=\"bar\"><span>child</span></div>",
+  "<div\n    class=\"foo\"\n    id=\"bar\"\n>\n    <span>child</span>\n</div>")
+
+test("Multiple attributes inline when only text content",
   "<div class=\"foo\" id=\"bar\">content</div>",
-  "<div class=\"foo\"\n    id=\"bar\">content</div>")
+  "<div class=\"foo\" id=\"bar\">content</div>")
 
 test("Single attribute no stack",
   "<div class=\"foo\">content</div>",
@@ -291,9 +295,13 @@ test("Indexer expression",
   "<span>@L[\"SendToEmail\"]</span>")
 
 -- Complex real-world examples
-test("Blazor component with attributes",
+test("Blazor component with attributes and inline content",
   "<MudButton Variant=\"Variant.Filled\" Color=\"Color.Primary\" OnClick=\"HandleClick\">Click Me</MudButton>",
-  "<MudButton Variant=\"Variant.Filled\"\n    Color=\"Color.Primary\"\n    OnClick=\"HandleClick\">Click Me</MudButton>")
+  "<MudButton Variant=\"Variant.Filled\" Color=\"Color.Primary\" OnClick=\"HandleClick\">Click Me</MudButton>")
+
+test("Blazor component with attributes and block content",
+  "<MudButton Variant=\"Variant.Filled\" Color=\"Color.Primary\"><span>Click Me</span></MudButton>",
+  "<MudButton\n    Variant=\"Variant.Filled\"\n    Color=\"Color.Primary\"\n>\n    <span>Click Me</span>\n</MudButton>")
 
 test("Full page structure",
   "@page \"/test\"\n@inject IService Svc\n\n<div class=\"container\">\n    <h1>Title</h1>\n    <p>@Model.Description</p>\n</div>",
@@ -359,7 +367,7 @@ test("Blazor @bind",
 
 test("Blazor @bind:event",
   "<input @bind=\"searchText\" @bind:event=\"oninput\" />",
-  "<input @bind=\"searchText\"\n    @bind:event=\"oninput\" />")
+  "<input\n    @bind=\"searchText\"\n    @bind:event=\"oninput\"\n/>")
 
 -- ref attribute
 test("Blazor @ref",
@@ -388,7 +396,7 @@ test("Complex MudBlazor component",
 -- Complex attributes with lambdas should not break
 test("Lambda in attribute stays intact",
   [[<MudDynamicTabs CloseTab="@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))" KeepPanelsAlive>content</MudDynamicTabs>]],
-  "<MudDynamicTabs CloseTab=\"@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))\"\n    KeepPanelsAlive>content</MudDynamicTabs>")
+  [[<MudDynamicTabs CloseTab="@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))" KeepPanelsAlive>content</MudDynamicTabs>]])
 
 -- @for inside component
 test("@for block inside component",
@@ -447,11 +455,11 @@ test("Complex Func expression in attribute",
 
 test("Multiple attributes with Razor expressions",
   [[<Column Property="x => x.Name" Title="@Localizer["Name"]" Hidden="@(IsHidden("Name"))">content</Column>]],
-  "<Column Property=\"x => x.Name\"\n    Title=\"@Localizer[\"Name\"]\"\n    Hidden=\"@(IsHidden(\"Name\"))\">content</Column>")
+  [[<Column Property="x => x.Name" Title="@Localizer["Name"]" Hidden="@(IsHidden("Name"))">content</Column>]])
 
 test("Razor expression with > inside attribute",
   [[<MudTabPanel Text="@($"{(i>9 ? "" : $"({i})")}")" ID="@i">content</MudTabPanel>]],
-  "<MudTabPanel Text=\"@($\"{(i>9 ? \"\" : $\"({i})\")}\")\"\n    ID=\"@i\">content</MudTabPanel>")
+  [[<MudTabPanel Text="@($"{(i>9 ? "" : $"({i})")}")" ID="@i">content</MudTabPanel>]])
 
 test("Complex ternary with > in attribute",
   [[<span class="@(value > 10 ? "large" : "small")">text</span>]],
@@ -606,11 +614,11 @@ test("@foreach with @if-else inside",
 -- Control flow with HTML attributes
 test("@foreach with component attributes",
   "@foreach (var item in items) { <MudListItem Text=\"@item.Name\" Icon=\"@item.Icon\" /> }",
-  "@foreach (var item in items)\n{\n    <MudListItem Text=\"@item.Name\"\n        Icon=\"@item.Icon\" />\n}")
+  "@foreach (var item in items)\n{\n    <MudListItem\n        Text=\"@item.Name\"\n        Icon=\"@item.Icon\"\n    />\n}")
 
 test("@if with styled div",
   "@if (isVisible) { <div class=\"container\" style=\"display: block;\"><p>Content</p></div> }",
-  "@if (isVisible)\n{\n    <div class=\"container\"\n        style=\"display: block;\">\n        <p>Content</p>\n    </div>\n}")
+  "@if (isVisible)\n{\n    <div\n        class=\"container\"\n        style=\"display: block;\"\n    >\n        <p>Content</p>\n    </div>\n}")
 
 -- Real-world complex examples
 test("Table with @foreach rows",
@@ -623,7 +631,7 @@ test("Conditional rendering with @if",
 
 test("MudBlazor DataGrid with conditional column",
   [[<MudDataGrid Items="@Items">@foreach (var col in Columns) { @if (col.Visible) { <PropertyColumn Property="col.Prop" Title="@col.Title" /> } }</MudDataGrid>]],
-  "<MudDataGrid Items=\"@Items\">\n    @foreach (var col in Columns)\n    {\n        @if (col.Visible)\n        {\n            <PropertyColumn Property=\"col.Prop\"\n                Title=\"@col.Title\" />\n        }\n    }\n</MudDataGrid>")
+  "<MudDataGrid Items=\"@Items\">\n    @foreach (var col in Columns)\n    {\n        @if (col.Visible)\n        {\n            <PropertyColumn\n                Property=\"col.Prop\"\n                Title=\"@col.Title\"\n            />\n        }\n    }\n</MudDataGrid>")
 
 print("\n=== SUMMARY ===")
 print("Passed: " .. tests_passed)

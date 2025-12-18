@@ -278,14 +278,15 @@ function M.parse_attributes(attr_string)
   return attrs
 end
 
---- Format attributes with stacking (JetBrains Rider style)
+--- Format attributes with stacking
 ---@param attrs table[]
 ---@param tag_name string
 ---@param indent string
 ---@param is_self_closing boolean
 ---@param config table
+---@param force_inline boolean|nil If true, don't stack even if many attributes
 ---@return string
-function M.format_attributes_stacked(attrs, tag_name, indent, is_self_closing, config)
+function M.format_attributes_stacked(attrs, tag_name, indent, is_self_closing, config, force_inline)
   if not tag_name then
     return ""
   end
@@ -299,7 +300,7 @@ function M.format_attributes_stacked(attrs, tag_name, indent, is_self_closing, c
   end
 
   local max_attrs = config.max_attributes_per_line
-  local should_stack = #attrs > max_attrs
+  local should_stack = #attrs > max_attrs and not force_inline
 
   if not should_stack then
     -- All attributes on one line
@@ -318,39 +319,29 @@ function M.format_attributes_stacked(attrs, tag_name, indent, is_self_closing, c
     end
   end
 
-  -- Stack attributes (Rider style: first attr on same line, rest indented)
+  -- Stack attributes: tag name on first line, each attribute on its own line, closing aligned with tag
   local lines = {}
-  local first_line = "<" .. tag_name
+  local attr_indent = indent .. string.rep(" ", config.indent_size)
 
-  -- Calculate alignment indent (align with first attribute)
-  local attr_indent
-  if config.align_attributes then
-    attr_indent = indent .. string.rep(" ", #tag_name + 2) -- +2 for "< "
-  else
-    attr_indent = indent .. string.rep(" ", config.indent_size)
-  end
+  -- Tag name on its own line
+  table.insert(lines, "<" .. tag_name)
 
-  for i, attr in ipairs(attrs) do
+  -- Each attribute on its own line
+  for _, attr in ipairs(attrs) do
     local attr_str
     if attr.value then
       attr_str = attr.name .. "=" .. attr.quote .. attr.value .. attr.quote
     else
       attr_str = attr.name
     end
-
-    if i == 1 then
-      first_line = first_line .. " " .. attr_str
-      table.insert(lines, first_line)
-    else
-      table.insert(lines, attr_indent .. attr_str)
-    end
+    table.insert(lines, attr_indent .. attr_str)
   end
 
-  -- Add closing bracket
+  -- Closing bracket on its own line, aligned with tag name (no extra indent)
   if is_self_closing then
-    lines[#lines] = lines[#lines] .. " />"
+    table.insert(lines, indent .. "/>")
   else
-    lines[#lines] = lines[#lines] .. ">"
+    table.insert(lines, indent .. ">")
   end
 
   return table.concat(lines, "\n")
@@ -1412,7 +1403,6 @@ function M.format(input, config)
       end
       just_opened_tag = false
       local tag_lower = token.tag:lower()
-      local formatted = M.format_attributes_stacked(token.attributes, token.tag, indent, false, config)
 
       -- Look ahead to see if this tag has only inline text content
       local has_only_inline = true
@@ -1442,16 +1432,19 @@ function M.format(input, config)
       end
 
       if has_only_inline and close_idx and #inline_parts > 0 then
-        -- Single line: <tag>content</tag>
+        -- Single line: <tag attrs>content</tag> - force inline formatting
+        local formatted = M.format_attributes_stacked(token.attributes, token.tag, indent, false, config, true)
         local inline_content = table.concat(inline_parts, " ")
         add_line(indent .. formatted .. inline_content .. "</" .. token.tag .. ">")
         i = close_idx
       elseif has_only_inline and close_idx and #inline_parts == 0 then
-        -- Empty tag
+        -- Empty tag - force inline formatting
+        local formatted = M.format_attributes_stacked(token.attributes, token.tag, indent, false, config, true)
         add_line(indent .. formatted .. "</" .. token.tag .. ">")
         i = close_idx
       elseif M.PRESERVE_CONTENT_ELEMENTS[tag_lower] then
-        -- Preserve content exactly (script, style, pre, textarea)
+        -- Preserve content exactly (script, style, pre, textarea) - force inline
+        local formatted = M.format_attributes_stacked(token.attributes, token.tag, indent, false, config, true)
         local content_parts = {}
         local content_start = i + 1
         local content_end = content_start
@@ -1468,8 +1461,14 @@ function M.format(input, config)
         add_line(indent .. formatted .. preserved_content .. "</" .. token.tag .. ">")
         i = content_end
       else
-        -- Block tag
-        add_line(indent .. formatted)
+        -- Block tag with children - stack attributes
+        local formatted = M.format_attributes_stacked(token.attributes, token.tag, indent, false, config)
+        -- Handle multi-line formatted output
+        for line in formatted:gmatch("[^\n]*") do
+          if line ~= "" then
+            add_line(indent .. line)
+          end
+        end
         indent_level = indent_level + 1
         just_opened_tag = true
       end
