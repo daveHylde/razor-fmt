@@ -20,8 +20,6 @@ M.config = {
     indent_size = 4,
     -- Max attributes before stacking (0 = always stack when >1 attribute)
     max_attributes_per_line = 1,
-    -- Align attributes with first attribute (false = use fixed indent)
-    align_attributes = false,
   },
 }
 

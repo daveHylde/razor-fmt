@@ -3,7 +3,7 @@
 Opinionated Razor file formatter for Neovim.
 
 - Formats `@code{}` blocks with [CSharpier](https://csharpier.com/)
-- Formats HTML/template sections with JetBrains Rider-style defaults (attributes stacked, one per line)
+- Formats HTML/template sections with JetBrains Rider-inspired defaults
 - Supports `.razor` and `.cshtml` files
 
 ## Requirements
@@ -77,9 +77,6 @@ With custom options:
 
       -- Max attributes before stacking (1 = stack when more than 1 attribute)
       max_attributes_per_line = 1,
-
-      -- Align attributes with first attribute
-      align_attributes = true,
     },
   },
 }
@@ -135,15 +132,18 @@ The HTML formatter uses JetBrains Rider-style defaults:
 **After:**
 
 ```html
-<div class="container"
-     id="main"
-     data-value="123"
-     @onclick="HandleClick">
+<div
+    class="container"
+    id="main"
+    data-value="123"
+    @onclick="HandleClick"
+>
 ```
 
-- First attribute stays on the same line as the tag
-- Subsequent attributes are aligned with the first attribute
-- Closing `>` or `/>` stays on the last attribute line
+- Tag name on its own line
+- Each attribute on its own line, indented one level
+- Closing `>` or `/>` on its own line, aligned with the tag name
+- Tags with only inline text content stay on a single line (e.g., `<p class="text">Hello</p>`)
 
 ### C# (@code blocks)
 
@@ -171,6 +171,25 @@ private void IncrementCount(){count++;}
 }
 ```
 
+### Razor Control Flow
+
+Razor control flow blocks (`@if`, `@foreach`, `@for`, `@while`, `@switch`, `@try-catch`, etc.) are formatted with C#-style braces on their own lines:
+
+**Before:**
+
+```razor
+@if (condition) { <p>Content</p> }
+```
+
+**After:**
+
+```razor
+@if (condition)
+{
+    <p>Content</p>
+}
+```
+
 ## Configuration Options
 
 | Option | Type | Default | Description |
@@ -180,7 +199,6 @@ private void IncrementCount(){count++;}
 | `format_html` | boolean | `true` | Enable HTML/template formatting |
 | `html.indent_size` | number | `4` | Indent size for HTML elements |
 | `html.max_attributes_per_line` | number | `1` | Max attributes before stacking (1 = stack when >1 attribute) |
-| `html.align_attributes` | boolean | `true` | Align stacked attributes with first attribute |
 
 ## License
 

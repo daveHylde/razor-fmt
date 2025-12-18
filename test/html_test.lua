@@ -8,7 +8,6 @@ local html = require("razor-fmt.html")
 local config = {
   indent_size = 4,
   max_attributes_per_line = 1,
-  align_attributes = false,
 }
 
 local tests_passed = 0

@@ -320,13 +320,14 @@ function M.format_attributes_stacked(attrs, tag_name, indent, is_self_closing, c
   end
 
   -- Stack attributes: tag name on first line, each attribute on its own line, closing aligned with tag
+  -- NOTE: This function returns lines WITHOUT the base indent - caller must add it
   local lines = {}
-  local attr_indent = indent .. string.rep(" ", config.indent_size)
+  local attr_indent = string.rep(" ", config.indent_size)
 
   -- Tag name on its own line
   table.insert(lines, "<" .. tag_name)
 
-  -- Each attribute on its own line
+  -- Each attribute on its own line (indented one level from tag)
   for _, attr in ipairs(attrs) do
     local attr_str
     if attr.value then
@@ -339,9 +340,9 @@ function M.format_attributes_stacked(attrs, tag_name, indent, is_self_closing, c
 
   -- Closing bracket on its own line, aligned with tag name (no extra indent)
   if is_self_closing then
-    table.insert(lines, indent .. "/>")
+    table.insert(lines, "/>")
   else
-    table.insert(lines, indent .. ">")
+    table.insert(lines, ">")
   end
 
   return table.concat(lines, "\n")
