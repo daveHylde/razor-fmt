@@ -576,11 +576,11 @@ test("@using statement with resource",
 -- @{ } code block formatting
 test("@{ } simple code block",
   "@{ var x = 1; }",
-  "@\n{\n    var x = 1;\n}")
+  "@{\n    var x = 1;\n}")
 
 test("@{ } multi-statement code block",
   "@{ var a = 1; var b = 2; }",
-  "@\n{\n    var a = 1; var b = 2;\n}")
+  "@{\n    var a = 1; var b = 2;\n}")
 
 -- Nested control flow formatting
 test("Nested @if in @foreach",

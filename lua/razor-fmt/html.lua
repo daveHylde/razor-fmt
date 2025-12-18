@@ -978,6 +978,17 @@ format_control_flow_block = function(content, base_indent, config)
     return result
   end
 
+  -- Special case: @{ } code block - keep @{ together
+  if parsed.keyword == "" and parsed.header == "@" then
+    table.insert(lines, base_indent .. "@{")
+    local body_lines = format_body(parsed.body, base_indent .. indent_str)
+    for _, line in ipairs(body_lines) do
+      table.insert(lines, line)
+    end
+    table.insert(lines, base_indent .. "}")
+    return table.concat(lines, "\n")
+  end
+
   -- Main block
   table.insert(lines, base_indent .. parsed.header)
   table.insert(lines, base_indent .. "{")
