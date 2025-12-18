@@ -632,6 +632,11 @@ test("MudBlazor DataGrid with conditional column",
   [[<MudDataGrid Items="@Items">@foreach (var col in Columns) { @if (col.Visible) { <PropertyColumn Property="col.Prop" Title="@col.Title" /> } }</MudDataGrid>]],
   "<MudDataGrid Items=\"@Items\">\n    @foreach (var col in Columns)\n    {\n        @if (col.Visible)\n        {\n            <PropertyColumn\n                Property=\"col.Prop\"\n                Title=\"@col.Title\"\n            />\n        }\n    }\n</MudDataGrid>")
 
+-- Empty component with many attributes should stack attributes
+test("Empty component with many attributes should stack",
+  [[<MudChart ChartOptions="_chartOptions" ChartType="ChartType.Bar" ChartSeries="@_series" @bind-SelectedIndex="_index" XAxisLabels="@_xAxisLabels" Height="@_height" AxisChartOptions="_axisChartOptions"></MudChart>]],
+  "<MudChart\n    ChartOptions=\"_chartOptions\"\n    ChartType=\"ChartType.Bar\"\n    ChartSeries=\"@_series\"\n    @bind-SelectedIndex=\"_index\"\n    XAxisLabels=\"@_xAxisLabels\"\n    Height=\"@_height\"\n    AxisChartOptions=\"_axisChartOptions\"\n></MudChart>")
+
 print("\n=== SUMMARY ===")
 print("Passed: " .. tests_passed)
 print("Failed: " .. tests_failed)

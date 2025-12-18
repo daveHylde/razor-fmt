@@ -308,9 +308,30 @@ function M.format(input, config)
         add_line(indent .. formatted .. inline_content .. "</" .. token.tag .. ">")
         i = close_idx
       elseif has_only_inline and close_idx and #inline_parts == 0 then
-        -- Empty tag - force inline formatting
-        local formatted = attributes.format_stacked(token.attributes, token.tag, false, config, true)
-        add_line(indent .. formatted .. "</" .. token.tag .. ">")
+        -- Empty tag - stack attributes if many, but keep open/close on same structure
+        local should_stack = #token.attributes > config.max_attributes_per_line
+        if should_stack then
+          -- Stack attributes, closing tag immediately after the >
+          local formatted = attributes.format_stacked(token.attributes, token.tag, false, config)
+          local formatted_lines = {}
+          for line in formatted:gmatch("[^\n]*") do
+            if line ~= "" then
+              table.insert(formatted_lines, line)
+            end
+          end
+          -- Add all lines except the last one normally
+          for idx = 1, #formatted_lines - 1 do
+            add_line(indent .. formatted_lines[idx])
+          end
+          -- Last line is ">" - append closing tag to it
+          if #formatted_lines > 0 then
+            add_line(indent .. formatted_lines[#formatted_lines] .. "</" .. token.tag .. ">")
+          end
+        else
+          -- Few attributes - keep inline
+          local formatted = attributes.format_stacked(token.attributes, token.tag, false, config, true)
+          add_line(indent .. formatted .. "</" .. token.tag .. ">")
+        end
         i = close_idx
       elseif PRESERVE_CONTENT_ELEMENTS[tag_lower] then
         -- Preserve content exactly (script, style, pre, textarea) - force inline
