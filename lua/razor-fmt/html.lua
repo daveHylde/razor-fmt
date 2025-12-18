@@ -1081,7 +1081,7 @@ function M.tokenize(text)
 
     -- Opening tag (must start with letter after <)
     if c == "<" and text:sub(pos + 1, pos + 1):match("[%a]") then
-      -- Find end of tag, handling quoted attributes
+      -- Find end of tag, handling quoted attributes with Razor expressions
       local tag_end = nil
       local search_pos = pos + 1
       local in_quote = nil
@@ -1091,6 +1091,120 @@ function M.tokenize(text)
         if in_quote then
           if sc == in_quote then
             in_quote = nil
+          elseif sc == "@" then
+            -- Razor expression inside attribute - need to skip it properly
+            search_pos = search_pos + 1
+            if search_pos <= len then
+              local next_c = text:sub(search_pos, search_pos)
+              if next_c == "(" then
+                -- @(...) - skip to matching paren
+                search_pos = search_pos + 1
+                local depth = 1
+                local in_string = nil
+                while search_pos <= len and depth > 0 do
+                  local pc = text:sub(search_pos, search_pos)
+                  if in_string then
+                    if pc == in_string and text:sub(search_pos - 1, search_pos - 1) ~= "\\" then
+                      in_string = nil
+                    end
+                  else
+                    if pc == '"' or pc == "'" then
+                      in_string = pc
+                    elseif pc == "(" then
+                      depth = depth + 1
+                    elseif pc == ")" then
+                      depth = depth - 1
+                    end
+                  end
+                  search_pos = search_pos + 1
+                end
+                -- Don't increment again at end of loop
+                search_pos = search_pos - 1
+              elseif next_c == "[" then
+                -- @[...] - indexer, skip to matching bracket
+                search_pos = search_pos + 1
+                local depth = 1
+                local in_string = nil
+                while search_pos <= len and depth > 0 do
+                  local bc = text:sub(search_pos, search_pos)
+                  if in_string then
+                    if bc == in_string and text:sub(search_pos - 1, search_pos - 1) ~= "\\" then
+                      in_string = nil
+                    end
+                  else
+                    if bc == '"' or bc == "'" then
+                      in_string = bc
+                    elseif bc == "[" then
+                      depth = depth + 1
+                    elseif bc == "]" then
+                      depth = depth - 1
+                    end
+                  end
+                  search_pos = search_pos + 1
+                end
+                search_pos = search_pos - 1
+              elseif next_c:match("[%a_]") then
+                -- @Identifier - consume identifier then check for chained access
+                while search_pos <= len and text:sub(search_pos, search_pos):match("[%w_]") do
+                  search_pos = search_pos + 1
+                end
+                -- Check for chained member access, indexers, or method calls
+                while search_pos <= len do
+                  local chain_c = text:sub(search_pos, search_pos)
+                  if chain_c == "." then
+                    search_pos = search_pos + 1
+                    while search_pos <= len and text:sub(search_pos, search_pos):match("[%w_]") do
+                      search_pos = search_pos + 1
+                    end
+                  elseif chain_c == "[" then
+                    search_pos = search_pos + 1
+                    local depth = 1
+                    local in_string = nil
+                    while search_pos <= len and depth > 0 do
+                      local bc = text:sub(search_pos, search_pos)
+                      if in_string then
+                        if bc == in_string and text:sub(search_pos - 1, search_pos - 1) ~= "\\" then
+                          in_string = nil
+                        end
+                      else
+                        if bc == '"' or bc == "'" then
+                          in_string = bc
+                        elseif bc == "[" then
+                          depth = depth + 1
+                        elseif bc == "]" then
+                          depth = depth - 1
+                        end
+                      end
+                      search_pos = search_pos + 1
+                    end
+                  elseif chain_c == "(" then
+                    search_pos = search_pos + 1
+                    local depth = 1
+                    local in_string = nil
+                    while search_pos <= len and depth > 0 do
+                      local pc = text:sub(search_pos, search_pos)
+                      if in_string then
+                        if pc == in_string and text:sub(search_pos - 1, search_pos - 1) ~= "\\" then
+                          in_string = nil
+                        end
+                      else
+                        if pc == '"' or pc == "'" then
+                          in_string = pc
+                        elseif pc == "(" then
+                          depth = depth + 1
+                        elseif pc == ")" then
+                          depth = depth - 1
+                        end
+                      end
+                      search_pos = search_pos + 1
+                    end
+                  else
+                    break
+                  end
+                end
+                search_pos = search_pos - 1
+              end
+            end
           end
         else
           if sc == '"' or sc == "'" then

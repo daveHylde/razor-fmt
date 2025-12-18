@@ -449,6 +449,14 @@ test("Multiple attributes with Razor expressions",
   [[<Column Property="x => x.Name" Title="@Localizer["Name"]" Hidden="@(IsHidden("Name"))">content</Column>]],
   "<Column Property=\"x => x.Name\"\n    Title=\"@Localizer[\"Name\"]\"\n    Hidden=\"@(IsHidden(\"Name\"))\">content</Column>")
 
+test("Razor expression with > inside attribute",
+  [[<MudTabPanel Text="@($"{(i>9 ? "" : $"({i})")}")" ID="@i">content</MudTabPanel>]],
+  "<MudTabPanel Text=\"@($\"{(i>9 ? \"\" : $\"({i})\")}\")\"\n    ID=\"@i\">content</MudTabPanel>")
+
+test("Complex ternary with > in attribute",
+  [[<span class="@(value > 10 ? "large" : "small")">text</span>]],
+  [[<span class="@(value > 10 ? "large" : "small")">text</span>]])
+
 -- Sibling element spacing (JetBrains style: no blank lines between siblings)
 test("Sibling self-closing elements no blank lines",
   [[<Columns><PropertyColumn Title="A" /><PropertyColumn Title="B" /><PropertyColumn Title="C" /></Columns>]],
