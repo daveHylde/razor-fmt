@@ -532,4 +532,143 @@ function M.parse_control_flow(content)
   return result
 end
 
+--- Parse switch body into individual case blocks
+--- Returns a list of { label, content } where label is "case X:" or "default:" and content is the case body
+---@param body string The switch body content (without outer braces)
+---@return table[] cases List of { label, content }
+function M.parse_switch_cases(body)
+  local cases = {}
+  local len = #body
+  local pos = 1
+  
+  -- Skip leading whitespace
+  while pos <= len and body:sub(pos, pos):match("%s") do
+    pos = pos + 1
+  end
+  
+  while pos <= len do
+    -- Look for 'case' or 'default'
+    local case_match = body:match("^(case%s+.-):", pos)
+    local default_match = body:match("^(default)%s*:", pos)
+    
+    local label, label_end
+    
+    if case_match and (not default_match or body:find("^case", pos)) then
+      -- Found a case label - need to handle complex patterns like { IsLoading: true }
+      -- Find the colon that ends the case label (not inside braces)
+      local case_start = pos
+      pos = pos + 4 -- skip "case"
+      
+      -- Skip whitespace after case
+      while pos <= len and body:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      
+      -- Now find the end of the case pattern (could contain braces for pattern matching)
+      local pattern_start = pos
+      local brace_depth = 0
+      local in_string = nil
+      
+      while pos <= len do
+        local c = body:sub(pos, pos)
+        
+        if in_string then
+          if c == in_string and body:sub(pos - 1, pos - 1) ~= "\\" then
+            in_string = nil
+          end
+        else
+          if c == '"' or c == "'" then
+            in_string = c
+          elseif c == "{" then
+            brace_depth = brace_depth + 1
+          elseif c == "}" then
+            brace_depth = brace_depth - 1
+          elseif c == ":" and brace_depth == 0 then
+            -- Found the end of case label
+            break
+          end
+        end
+        pos = pos + 1
+      end
+      
+      label = "case " .. body:sub(pattern_start, pos - 1):match("^%s*(.-)%s*$")
+      label_end = pos + 1 -- skip the colon
+      
+    elseif default_match then
+      label = "default"
+      -- Find the colon
+      pos = pos + 7 -- skip "default"
+      while pos <= len and body:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      if body:sub(pos, pos) == ":" then
+        label_end = pos + 1
+      else
+        break -- malformed
+      end
+    else
+      -- No more cases found
+      break
+    end
+    
+    pos = label_end
+    
+    -- Skip whitespace after colon
+    while pos <= len and body:sub(pos, pos):match("%s") do
+      pos = pos + 1
+    end
+    
+    -- Now find the content until next case/default or end
+    local content_start = pos
+    local content_end = len
+    
+    -- Look ahead for next case or default
+    local search_pos = pos
+    local brace_depth = 0
+    local in_string = nil
+    
+    while search_pos <= len do
+      local c = body:sub(search_pos, search_pos)
+      
+      if in_string then
+        if c == in_string and body:sub(search_pos - 1, search_pos - 1) ~= "\\" then
+          in_string = nil
+        end
+      else
+        if c == '"' or c == "'" then
+          in_string = c
+        elseif c == "{" then
+          brace_depth = brace_depth + 1
+        elseif c == "}" then
+          brace_depth = brace_depth - 1
+        elseif brace_depth == 0 then
+          -- Check if we're at a new case or default (at start of line or after whitespace)
+          local rest = body:sub(search_pos)
+          if rest:match("^case%s") or rest:match("^default%s*:") then
+            content_end = search_pos - 1
+            break
+          end
+        end
+      end
+      search_pos = search_pos + 1
+    end
+    
+    local content = body:sub(content_start, content_end):match("^(.-)%s*$") or ""
+    
+    table.insert(cases, {
+      label = label,
+      content = content,
+    })
+    
+    pos = content_end + 1
+    
+    -- Skip whitespace before next case
+    while pos <= len and body:sub(pos, pos):match("%s") do
+      pos = pos + 1
+    end
+  end
+  
+  return cases
+end
+
 return M

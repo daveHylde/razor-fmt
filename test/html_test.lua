@@ -535,11 +535,11 @@ test("@do-while with complex condition",
 -- @switch formatting
 test("@switch simple formatting",
   "@switch (value) { case 1: <p>one</p> break; case 2: <p>two</p> break; default: <p>other</p> break; }",
-  "@switch (value)\n{\n    case 1:\n    <p>one</p>\n    break; case 2:\n    <p>two</p>\n    break; default:\n    <p>other</p>\n    break;\n}")
+  "@switch (value)\n{\n    case 1:\n        <p>one</p>\n        break;\n    case 2:\n        <p>two</p>\n        break;\n    default:\n        <p>other</p>\n        break;\n}")
 
 test("@switch with enum",
   "@switch (status) { case Status.Active: <span class=\"active\">Active</span> break; }",
-  "@switch (status)\n{\n    case Status.Active:\n    <span class=\"active\">Active</span>\n    break;\n}")
+  "@switch (status)\n{\n    case Status.Active:\n        <span class=\"active\">Active</span>\n        break;\n}")
 
 -- @try-catch-finally formatting
 test("@try-catch simple formatting",
@@ -604,7 +604,7 @@ test("Deeply nested control flow",
 
 test("@switch with nested @if",
   "@switch (type) { case 1: @if (flag) { <p>yes</p> } break; }",
-  "@switch (type)\n{\n    case 1:\n    @if (flag)\n    {\n        <p>yes</p>\n    }\n    break;\n}")
+  "@switch (type)\n{\n    case 1:\n        @if (flag)\n        {\n            <p>yes</p>\n        }\n        break;\n}")
 
 test("@foreach with @if-else inside",
   "@foreach (var item in items) { @if (item.Active) { <span class=\"active\">@item</span> } else { <span>@item</span> } }",

@@ -53,6 +53,44 @@ format_control_flow_block = function(content, base_indent, config)
 
     return result
   end
+  
+  -- Helper to format a switch case's content (HTML mixed with break statement)
+  local function format_switch_case_content(case_content, indent)
+    local result = {}
+    
+    -- Split the content to separate the break statement from HTML
+    -- The content may end with "break;" which we want to preserve
+    local trimmed = case_content:match("^%s*(.-)%s*$")
+    if not trimmed or trimmed == "" then
+      return result
+    end
+    
+    -- Check if it ends with break;
+    local main_content, has_break = trimmed:match("^(.-)%s*(break%s*;)%s*$")
+    if not main_content then
+      main_content = trimmed
+      has_break = nil
+    end
+    
+    -- Format the main HTML content
+    if main_content and main_content:match("%S") then
+      local formatted = M.format(main_content, config)
+      for line in formatted:gmatch("[^\n]*") do
+        if line:match("%S") then
+          table.insert(result, indent .. line)
+        elseif #result > 0 then
+          table.insert(result, "")
+        end
+      end
+    end
+    
+    -- Add break statement
+    if has_break then
+      table.insert(result, indent .. "break;")
+    end
+    
+    return result
+  end
 
   -- Special case: @{ } code block - keep @{ together
   if parsed.keyword == "" and parsed.header == "@" then
@@ -61,6 +99,31 @@ format_control_flow_block = function(content, base_indent, config)
     for _, line in ipairs(body_lines) do
       table.insert(lines, line)
     end
+    table.insert(lines, base_indent .. "}")
+    return table.concat(lines, "\n")
+  end
+  
+  -- Special case: @switch - need to handle case/default labels specially
+  if parsed.keyword == "switch" then
+    table.insert(lines, base_indent .. parsed.header)
+    table.insert(lines, base_indent .. "{")
+    
+    -- Parse the switch body into cases
+    local cases = razor.parse_switch_cases(parsed.body)
+    local case_indent = base_indent .. indent_str
+    local body_indent = base_indent .. indent_str .. indent_str
+    
+    for _, case in ipairs(cases) do
+      -- Add the case/default label
+      table.insert(lines, case_indent .. case.label .. ":")
+      
+      -- Format and add the case content
+      local case_lines = format_switch_case_content(case.content, body_indent)
+      for _, line in ipairs(case_lines) do
+        table.insert(lines, line)
+      end
+    end
+    
     table.insert(lines, base_indent .. "}")
     return table.concat(lines, "\n")
   end
