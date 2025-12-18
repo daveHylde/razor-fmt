@@ -265,9 +265,13 @@ test("@if block preserves content",
   "@if (x)\n{\n    <p>yes</p>\n}",
   "@if (x)\n{\n    <p>yes</p>\n}")
 
+test("@if block formats braces on own lines",
+  "@if (x) { y }",
+  "@if (x)\n{\n    y\n}")
+
 test("@if inside div",
   "<div>\n    @if (x) { y }\n</div>",
-  "<div>\n    @if (x) { y }\n</div>")
+  "<div>\n    @if (x)\n    {\n        y\n    }\n</div>")
 
 test("@foreach inside ul",
   "<ul>\n    @foreach (var i in items)\n    {\n        <li>@i</li>\n    }\n</ul>",
@@ -394,7 +398,8 @@ test("@for block inside component",
     }
 </div>]],
   [[<div>
-    @for(var i = 0; i < 10; i++){
+    @for (var i = 0; i < 10; i++)
+    {
         <span>@i</span>
     }
 </div>]])
@@ -421,11 +426,11 @@ test("Pre tag preserves whitespace",
 -- Blank lines around Razor blocks
 test("Blank line before Razor block with content before",
   "<div>\n    <span>Before</span>\n    @if (x) { y }\n    <span>After</span>\n</div>",
-  "<div>\n    <span>Before</span>\n\n    @if (x) { y }\n\n    <span>After</span>\n</div>")
+  "<div>\n    <span>Before</span>\n\n    @if (x)\n    {\n        y\n    }\n\n    <span>After</span>\n</div>")
 
 test("No blank line when Razor block is first child",
   "<div>\n    @if (x) { y }\n    <span>After</span>\n</div>",
-  "<div>\n    @if (x) { y }\n\n    <span>After</span>\n</div>")
+  "<div>\n    @if (x)\n    {\n        y\n    }\n\n    <span>After</span>\n</div>")
 
 -- Razor expressions with nested quotes in attributes
 test("Localizer in attribute value",
@@ -452,6 +457,165 @@ test("Sibling self-closing elements no blank lines",
 test("Sibling block elements no blank lines",
   [[<div><header>H</header><main>M</main><footer>F</footer></div>]],
   "<div>\n    <header>H</header>\n    <main>M</main>\n    <footer>F</footer>\n</div>")
+
+print("\n=== CONTROL FLOW FORMATTING TESTS ===\n")
+
+-- @if formatting
+test("@if simple formatting",
+  "@if (condition) { <p>content</p> }",
+  "@if (condition)\n{\n    <p>content</p>\n}")
+
+test("@if with else",
+  "@if (a) { <p>yes</p> } else { <p>no</p> }",
+  "@if (a)\n{\n    <p>yes</p>\n}\nelse\n{\n    <p>no</p>\n}")
+
+test("@if with else if",
+  "@if (a) { <p>A</p> } else if (b) { <p>B</p> }",
+  "@if (a)\n{\n    <p>A</p>\n}\nelse if (b)\n{\n    <p>B</p>\n}")
+
+test("@if with else if and else",
+  "@if (a) { <p>A</p> } else if (b) { <p>B</p> } else { <p>C</p> }",
+  "@if (a)\n{\n    <p>A</p>\n}\nelse if (b)\n{\n    <p>B</p>\n}\nelse\n{\n    <p>C</p>\n}")
+
+test("@if multiple else if chains",
+  "@if (a) { 1 } else if (b) { 2 } else if (c) { 3 } else { 4 }",
+  "@if (a)\n{\n    1\n}\nelse if (b)\n{\n    2\n}\nelse if (c)\n{\n    3\n}\nelse\n{\n    4\n}")
+
+-- @foreach formatting
+test("@foreach simple formatting",
+  "@foreach (var item in items) { <li>@item</li> }",
+  "@foreach (var item in items)\n{\n    <li>@item</li>\n}")
+
+test("@foreach with multiple elements",
+  "@foreach (var item in items) { <tr><td>@item.Name</td><td>@item.Value</td></tr> }",
+  "@foreach (var item in items)\n{\n    <tr>\n        <td>@item.Name</td>\n        <td>@item.Value</td>\n    </tr>\n}")
+
+-- @for formatting
+test("@for simple formatting",
+  "@for (int i = 0; i < 10; i++) { <span>@i</span> }",
+  "@for (int i = 0; i < 10; i++)\n{\n    <span>@i</span>\n}")
+
+test("@for with complex increment",
+  "@for (int i = start; i <= end; i += step) { <p>@i</p> }",
+  "@for (int i = start; i <= end; i += step)\n{\n    <p>@i</p>\n}")
+
+-- @while formatting
+test("@while simple formatting",
+  "@while (condition) { <p>looping</p> }",
+  "@while (condition)\n{\n    <p>looping</p>\n}")
+
+test("@while with complex condition",
+  "@while (count > 0 && !done) { <span>@count--</span> }",
+  "@while (count > 0 && !done)\n{\n    <span>@count--</span>\n}")
+
+-- @do-while formatting
+test("@do-while simple formatting",
+  "@do { <p>at least once</p> } while (condition);",
+  "@do\n{\n    <p>at least once</p>\n} while (condition);")
+
+test("@do-while with complex condition",
+  "@do { <span>@value</span> } while (value < max && !stop);",
+  "@do\n{\n    <span>@value</span>\n} while (value < max && !stop);")
+
+-- @switch formatting
+test("@switch simple formatting",
+  "@switch (value) { case 1: <p>one</p> break; case 2: <p>two</p> break; default: <p>other</p> break; }",
+  "@switch (value)\n{\n    case 1:\n    <p>one</p>\n    break; case 2:\n    <p>two</p>\n    break; default:\n    <p>other</p>\n    break;\n}")
+
+test("@switch with enum",
+  "@switch (status) { case Status.Active: <span class=\"active\">Active</span> break; }",
+  "@switch (status)\n{\n    case Status.Active:\n    <span class=\"active\">Active</span>\n    break;\n}")
+
+-- @try-catch-finally formatting
+test("@try-catch simple formatting",
+  "@try { <p>risky</p> } catch (Exception ex) { <p>@ex.Message</p> }",
+  "@try\n{\n    <p>risky</p>\n}\ncatch (Exception ex)\n{\n    <p>@ex.Message</p>\n}")
+
+test("@try-catch without exception type",
+  "@try { <p>risky</p> } catch { <p>error</p> }",
+  "@try\n{\n    <p>risky</p>\n}\ncatch\n{\n    <p>error</p>\n}")
+
+test("@try-catch-finally formatting",
+  "@try { <p>try</p> } catch (Exception ex) { <p>catch</p> } finally { <p>finally</p> }",
+  "@try\n{\n    <p>try</p>\n}\ncatch (Exception ex)\n{\n    <p>catch</p>\n}\nfinally\n{\n    <p>finally</p>\n}")
+
+test("@try with multiple catch blocks",
+  "@try { op() } catch (IOException ex) { io() } catch (Exception ex) { gen() }",
+  "@try\n{\n    op()\n}\ncatch (IOException ex)\n{\n    io()\n}\ncatch (Exception ex)\n{\n    gen()\n}")
+
+test("@try with multiple catch and finally",
+  "@try { a } catch (IOException ex) { b } catch { c } finally { d }",
+  "@try\n{\n    a\n}\ncatch (IOException ex)\n{\n    b\n}\ncatch\n{\n    c\n}\nfinally\n{\n    d\n}")
+
+-- @lock formatting
+test("@lock simple formatting",
+  "@lock (syncObj) { <p>critical section</p> }",
+  "@lock (syncObj)\n{\n    <p>critical section</p>\n}")
+
+test("@lock with complex lock object",
+  "@lock (typeof(MyClass)) { <p>type lock</p> }",
+  "@lock (typeof(MyClass))\n{\n    <p>type lock</p>\n}")
+
+-- @using statement formatting
+test("@using statement simple formatting",
+  "@using (var scope = new Scope()) { <p>scoped</p> }",
+  "@using (var scope = new Scope())\n{\n    <p>scoped</p>\n}")
+
+test("@using statement with resource",
+  "@using (var stream = File.OpenRead(path)) { <p>reading</p> }",
+  "@using (var stream = File.OpenRead(path))\n{\n    <p>reading</p>\n}")
+
+-- @{ } code block formatting
+test("@{ } simple code block",
+  "@{ var x = 1; }",
+  "@\n{\n    var x = 1;\n}")
+
+test("@{ } multi-statement code block",
+  "@{ var a = 1; var b = 2; }",
+  "@\n{\n    var a = 1; var b = 2;\n}")
+
+-- Nested control flow formatting
+test("Nested @if in @foreach",
+  "@foreach (var item in items) { @if (item.IsVisible) { <p>@item.Name</p> } }",
+  "@foreach (var item in items)\n{\n    @if (item.IsVisible)\n    {\n        <p>@item.Name</p>\n    }\n}")
+
+test("Nested @foreach in @if",
+  "@if (hasItems) { <ul> @foreach (var i in items) { <li>@i</li> } </ul> }",
+  "@if (hasItems)\n{\n    <ul>\n        @foreach (var i in items)\n        {\n            <li>@i</li>\n        }\n    </ul>\n}")
+
+test("Deeply nested control flow",
+  "@if (a) { @foreach (var i in items) { @if (i.Show) { <span>@i</span> } } }",
+  "@if (a)\n{\n    @foreach (var i in items)\n    {\n        @if (i.Show)\n        {\n            <span>@i</span>\n        }\n    }\n}")
+
+test("@switch with nested @if",
+  "@switch (type) { case 1: @if (flag) { <p>yes</p> } break; }",
+  "@switch (type)\n{\n    case 1:\n    @if (flag)\n    {\n        <p>yes</p>\n    }\n    break;\n}")
+
+test("@foreach with @if-else inside",
+  "@foreach (var item in items) { @if (item.Active) { <span class=\"active\">@item</span> } else { <span>@item</span> } }",
+  "@foreach (var item in items)\n{\n    @if (item.Active)\n    {\n        <span class=\"active\">@item</span>\n    }\n    else\n    {\n        <span>@item</span>\n    }\n}")
+
+-- Control flow with HTML attributes
+test("@foreach with component attributes",
+  "@foreach (var item in items) { <MudListItem Text=\"@item.Name\" Icon=\"@item.Icon\" /> }",
+  "@foreach (var item in items)\n{\n    <MudListItem Text=\"@item.Name\"\n        Icon=\"@item.Icon\" />\n}")
+
+test("@if with styled div",
+  "@if (isVisible) { <div class=\"container\" style=\"display: block;\"><p>Content</p></div> }",
+  "@if (isVisible)\n{\n    <div class=\"container\"\n        style=\"display: block;\">\n        <p>Content</p>\n    </div>\n}")
+
+-- Real-world complex examples
+test("Table with @foreach rows",
+  "<table><tbody>@foreach (var row in rows) { <tr><td>@row.Col1</td><td>@row.Col2</td></tr> }</tbody></table>",
+  "<table>\n    <tbody>\n        @foreach (var row in rows)\n        {\n            <tr>\n                <td>@row.Col1</td>\n                <td>@row.Col2</td>\n            </tr>\n        }\n    </tbody>\n</table>")
+
+test("Conditional rendering with @if",
+  "<div>@if (user.IsAdmin) { <AdminPanel /> } else { <UserPanel /> }</div>",
+  "<div>\n    @if (user.IsAdmin)\n    {\n        <AdminPanel />\n    }\n    else\n    {\n        <UserPanel />\n    }\n</div>")
+
+test("MudBlazor DataGrid with conditional column",
+  [[<MudDataGrid Items="@Items">@foreach (var col in Columns) { @if (col.Visible) { <PropertyColumn Property="col.Prop" Title="@col.Title" /> } }</MudDataGrid>]],
+  "<MudDataGrid Items=\"@Items\">\n    @foreach (var col in Columns)\n    {\n        @if (col.Visible)\n        {\n            <PropertyColumn Property=\"col.Prop\"\n                Title=\"@col.Title\" />\n        }\n    }\n</MudDataGrid>")
 
 print("\n=== SUMMARY ===")
 print("Passed: " .. tests_passed)

@@ -74,6 +74,9 @@ local CONTROL_FLOW_KEYWORDS = {
   ["section"] = true, -- @section Name { }
 }
 
+-- Forward declarations
+local format_control_flow_block
+
 --- Parse attributes from an attribute string
 ---@param attr_string string
 ---@return table[] List of { name, value, quote } tables
@@ -661,6 +664,348 @@ local function try_consume_line_directive(text, pos)
   return len
 end
 
+--- Extract content inside braces (returns content without surrounding braces)
+---@param text string
+---@param start_pos number Position of opening brace
+---@return string|nil content
+---@return number|nil end_pos Position of closing brace
+local function extract_brace_content(text, start_pos)
+  local len = #text
+  if start_pos > len or text:sub(start_pos, start_pos) ~= "{" then
+    return nil, nil
+  end
+
+  local close_pos = find_matching_close(text, start_pos + 1, "{", "}")
+  if not close_pos then
+    return nil, nil
+  end
+
+  local content = text:sub(start_pos + 1, close_pos - 1)
+  return content, close_pos
+end
+
+--- Parse a control flow block into its components
+--- Returns a table with header, body, and chained blocks
+---@param content string The full control flow content starting with @
+---@return table|nil parsed { keyword, header, body, chains }
+local function parse_control_flow(content)
+  local len = #content
+  if len == 0 or content:sub(1, 1) ~= "@" then
+    return nil
+  end
+
+  local pos = 2 -- after @
+
+  -- Check for @{ } code block
+  if content:sub(pos, pos) == "{" then
+    local body_content, close_pos = extract_brace_content(content, pos)
+    if body_content then
+      return {
+        keyword = "",
+        header = "@",
+        body = body_content,
+        chains = {},
+      }
+    end
+    return nil
+  end
+
+  -- Check for @* comment *@
+  if content:sub(pos, pos) == "*" then
+    return nil -- Don't format comments
+  end
+
+  -- Get keyword
+  if not content:sub(pos, pos):match("[%a]") then
+    return nil
+  end
+
+  local kw_end = pos
+  while kw_end <= len and content:sub(kw_end, kw_end):match("[%w_]") do
+    kw_end = kw_end + 1
+  end
+  local keyword = content:sub(pos, kw_end - 1):lower()
+
+  -- Check if it's a control flow keyword that we format
+  if not CONTROL_FLOW_KEYWORDS[keyword] then
+    return nil
+  end
+
+  -- Don't format @code or @functions blocks (those are C# code)
+  if keyword == "code" or keyword == "functions" then
+    return nil
+  end
+
+  pos = kw_end
+
+  -- Skip whitespace
+  while pos <= len and content:sub(pos, pos):match("%s") do
+    pos = pos + 1
+  end
+
+  -- For @section, consume the section name
+  local section_name = nil
+  if keyword == "section" then
+    local name_start = pos
+    while pos <= len and content:sub(pos, pos):match("[%w_]") do
+      pos = pos + 1
+    end
+    section_name = content:sub(name_start, pos - 1)
+    while pos <= len and content:sub(pos, pos):match("%s") do
+      pos = pos + 1
+    end
+  end
+
+  -- Get condition in parentheses if present
+  local condition = nil
+  if content:sub(pos, pos) == "(" then
+    local paren_close = find_matching_close(content, pos + 1, "(", ")")
+    if paren_close then
+      condition = content:sub(pos, paren_close)
+      pos = paren_close + 1
+    end
+  end
+
+  -- Skip whitespace before block
+  while pos <= len and content:sub(pos, pos):match("%s") do
+    pos = pos + 1
+  end
+
+  -- Get body
+  if content:sub(pos, pos) ~= "{" then
+    return nil
+  end
+
+  local body_content, brace_close = extract_brace_content(content, pos)
+  if not body_content then
+    return nil
+  end
+
+  -- Build header
+  local header
+  if keyword == "section" then
+    header = "@section " .. (section_name or "")
+  elseif condition then
+    header = "@" .. keyword .. " " .. condition
+  else
+    header = "@" .. keyword
+  end
+
+  local result = {
+    keyword = keyword,
+    header = header,
+    body = body_content,
+    chains = {},
+  }
+
+  pos = brace_close + 1
+
+  -- Handle chained blocks: else, else if, catch, finally, while (for do-while)
+  while pos <= len do
+    -- Skip whitespace
+    while pos <= len and content:sub(pos, pos):match("%s") do
+      pos = pos + 1
+    end
+
+    if pos > len then
+      break
+    end
+
+    local rest = content:sub(pos)
+
+    -- else if
+    if rest:match("^else%s+if%s*%(") or rest:match("^else%s*if%s*%(") then
+      pos = pos + 4 -- skip "else"
+      while pos <= len and content:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      pos = pos + 2 -- skip "if"
+      while pos <= len and content:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      local paren_close = find_matching_close(content, pos + 1, "(", ")")
+      if not paren_close then break end
+      local chain_condition = content:sub(pos, paren_close)
+      pos = paren_close + 1
+      while pos <= len and content:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      if content:sub(pos, pos) ~= "{" then break end
+      local chain_body, chain_close = extract_brace_content(content, pos)
+      if not chain_body then break end
+      table.insert(result.chains, {
+        header = "else if " .. chain_condition,
+        body = chain_body,
+      })
+      pos = chain_close + 1
+
+    -- else
+    elseif rest:match("^else%s*{") then
+      pos = pos + 4 -- skip "else"
+      while pos <= len and content:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      local chain_body, chain_close = extract_brace_content(content, pos)
+      if not chain_body then break end
+      table.insert(result.chains, {
+        header = "else",
+        body = chain_body,
+      })
+      pos = chain_close + 1
+
+    -- catch with exception type
+    elseif rest:match("^catch%s*%(") then
+      pos = pos + 5 -- skip "catch"
+      while pos <= len and content:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      local paren_close = find_matching_close(content, pos + 1, "(", ")")
+      if not paren_close then break end
+      local chain_condition = content:sub(pos, paren_close)
+      pos = paren_close + 1
+      while pos <= len and content:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      if content:sub(pos, pos) ~= "{" then break end
+      local chain_body, chain_close = extract_brace_content(content, pos)
+      if not chain_body then break end
+      table.insert(result.chains, {
+        header = "catch " .. chain_condition,
+        body = chain_body,
+      })
+      pos = chain_close + 1
+
+    -- catch without exception type
+    elseif rest:match("^catch%s*{") then
+      pos = pos + 5 -- skip "catch"
+      while pos <= len and content:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      local chain_body, chain_close = extract_brace_content(content, pos)
+      if not chain_body then break end
+      table.insert(result.chains, {
+        header = "catch",
+        body = chain_body,
+      })
+      pos = chain_close + 1
+
+    -- finally
+    elseif rest:match("^finally%s*{") then
+      pos = pos + 7 -- skip "finally"
+      while pos <= len and content:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      local chain_body, chain_close = extract_brace_content(content, pos)
+      if not chain_body then break end
+      table.insert(result.chains, {
+        header = "finally",
+        body = chain_body,
+      })
+      pos = chain_close + 1
+
+    -- while (for do-while)
+    elseif keyword == "do" and rest:match("^while%s*%(") then
+      pos = pos + 5 -- skip "while"
+      while pos <= len and content:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      local paren_close = find_matching_close(content, pos + 1, "(", ")")
+      if not paren_close then break end
+      local chain_condition = content:sub(pos, paren_close)
+      pos = paren_close + 1
+      -- Skip optional semicolon
+      while pos <= len and content:sub(pos, pos):match("%s") do
+        pos = pos + 1
+      end
+      if content:sub(pos, pos) == ";" then
+        pos = pos + 1
+      end
+      table.insert(result.chains, {
+        header = "while " .. chain_condition,
+        body = nil, -- do-while has no body after while
+        is_do_while = true,
+      })
+      break -- do-while is complete
+
+    else
+      break
+    end
+  end
+
+  return result
+end
+
+--- Format a control flow block with proper indentation
+--- Brackets on their own line, body indented and recursively formatted
+---@param content string The raw control flow content
+---@param base_indent string The base indentation
+---@param config table Formatter config
+---@return string Formatted control flow block
+format_control_flow_block = function(content, base_indent, config)
+  local parsed = parse_control_flow(content)
+  if not parsed then
+    -- Can't parse, return as-is with base indentation
+    local trimmed = content:match("^%s*(.-)%s*$")
+    return base_indent .. trimmed
+  end
+
+  local indent_str = string.rep(" ", config.indent_size)
+  local lines = {}
+
+  -- Helper to format body content (recursively format template content)
+  local function format_body(body, indent)
+    if not body then
+      return {}
+    end
+
+    local result = {}
+    -- Tokenize the body content
+    local body_tokens = M.tokenize(body)
+
+    -- Use a simplified formatting for the body
+    local body_formatted = M.format(body, config)
+
+    -- Split into lines and add proper indentation
+    for line in body_formatted:gmatch("[^\n]*") do
+      if line:match("%S") then
+        table.insert(result, indent .. line)
+      elseif #result > 0 then
+        -- Preserve blank lines within content
+        table.insert(result, "")
+      end
+    end
+
+    return result
+  end
+
+  -- Main block
+  table.insert(lines, base_indent .. parsed.header)
+  table.insert(lines, base_indent .. "{")
+  local body_lines = format_body(parsed.body, base_indent .. indent_str)
+  for _, line in ipairs(body_lines) do
+    table.insert(lines, line)
+  end
+  table.insert(lines, base_indent .. "}")
+
+  -- Chained blocks
+  for _, chain in ipairs(parsed.chains) do
+    if chain.is_do_while then
+      -- do-while: "while (condition);" on same line as closing brace
+      lines[#lines] = base_indent .. "}" .. " " .. chain.header .. ";"
+    else
+      table.insert(lines, base_indent .. chain.header)
+      table.insert(lines, base_indent .. "{")
+      local chain_body_lines = format_body(chain.body, base_indent .. indent_str)
+      for _, line in ipairs(chain_body_lines) do
+        table.insert(lines, line)
+      end
+      table.insert(lines, base_indent .. "}")
+    end
+  end
+
+  return table.concat(lines, "\n")
+end
+
 --- Tokenize HTML/Razor content
 ---@param text string
 ---@return table[]
@@ -898,53 +1243,20 @@ function M.format(input, config)
       end
       just_opened_tag = false
 
-      -- Multi-line block - preserve internal structure, adjust base indentation
-      local content = token.content
-      local lines = {}
-      for line in content:gmatch("[^\n]+") do
-        table.insert(lines, line)
-      end
+      -- Try to format control flow block with proper structure
+      local formatted = format_control_flow_block(token.content, indent, config)
 
-      if #lines == 1 then
-        add_line(indent .. content:match("^%s*(.-)%s*$"))
-      else
-        -- The first line often has no leading whitespace because the preceding
-        -- whitespace was captured by the TEXT token. Use minimum indent of all
-        -- lines except the first as the base.
-        local min_indent = math.huge
-        for j = 2, #lines do
-          local line = lines[j]
-          if line:match("%S") then
-            local leading = #(line:match("^(%s*)") or "")
-            min_indent = math.min(min_indent, leading)
-          end
-        end
-        -- If all subsequent lines have more indent, use 0
-        if min_indent == math.huge then
-          min_indent = 0
-        end
-
-        -- Output each line, adjusting only the base indentation
-        for j, line in ipairs(lines) do
-          if line:match("%S") then
-            local line_indent = #(line:match("^(%s*)") or "")
-            local relative_indent
-            if j == 1 then
-              -- First line: no leading whitespace in token, output at current indent
-              relative_indent = 0
-            else
-              relative_indent = line_indent - min_indent
-              if relative_indent < 0 then relative_indent = 0 end
-            end
-            local stripped = line:match("^%s*(.-)%s*$")
-            add_line(indent .. string.rep(" ", relative_indent) .. stripped)
-          else
-            add_line("")
-          end
+      -- Add the formatted block (may be multi-line)
+      for line in formatted:gmatch("[^\n]*") do
+        if line ~= "" then
+          add_line(line)
+        elseif #output > 0 then
+          add_line("")
         end
       end
 
       -- Mark that we just output a Razor block (for adding blank line after)
+      last_was_razor_block = true
       last_was_razor_block = true
 
     elseif token.type == M.TOKEN_TYPES.TAG_SELF_CLOSE then
