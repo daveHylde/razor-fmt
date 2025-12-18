@@ -1389,7 +1389,12 @@ function M.format(input, config)
       end
       just_opened_tag = false
       local formatted = M.format_attributes_stacked(token.attributes, token.tag, indent, true, config)
-      add_line(indent .. formatted)
+      -- Handle multi-line formatted output (stacked attributes)
+      for line in formatted:gmatch("[^\n]*") do
+        if line ~= "" then
+          add_line(indent .. line)
+        end
+      end
 
     elseif token.type == M.TOKEN_TYPES.TAG_OPEN then
       -- Add blank line after previous Razor block
