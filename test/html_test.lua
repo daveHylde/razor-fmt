@@ -637,6 +637,16 @@ test("Empty component with many attributes should stack",
   [[<MudChart ChartOptions="_chartOptions" ChartType="ChartType.Bar" ChartSeries="@_series" @bind-SelectedIndex="_index" XAxisLabels="@_xAxisLabels" Height="@_height" AxisChartOptions="_axisChartOptions"></MudChart>]],
   "<MudChart\n    ChartOptions=\"_chartOptions\"\n    ChartType=\"ChartType.Bar\"\n    ChartSeries=\"@_series\"\n    @bind-SelectedIndex=\"_index\"\n    XAxisLabels=\"@_xAxisLabels\"\n    Height=\"@_height\"\n    AxisChartOptions=\"_axisChartOptions\"\n></MudChart>")
 
+-- @if-else with stacked attributes in body (regression test for blank line issue)
+test("@if-else with stacked attributes no extra blank lines",
+  "@if (_loading) { <MudGrid Class=\"pa-8\" Spacing=\"12\"><MudItem sm=\"12\" md=\"6\">Loading</MudItem></MudGrid> } else { <MudGrid Class=\"px-8\" Spacing=\"8\"><MudItem sm=\"12\" md=\"6\">Content</MudItem></MudGrid> }",
+  "@if (_loading)\n{\n    <MudGrid\n        Class=\"pa-8\"\n        Spacing=\"12\"\n    >\n        <MudItem sm=\"12\" md=\"6\">Loading</MudItem>\n    </MudGrid>\n}\nelse\n{\n    <MudGrid\n        Class=\"px-8\"\n        Spacing=\"8\"\n    >\n        <MudItem sm=\"12\" md=\"6\">Content</MudItem>\n    </MudGrid>\n}")
+
+-- Stacked attributes should not have blank lines between them
+test("Stacked attributes no blank lines between",
+  "<MudGrid Class=\"pa-8\" Spacing=\"12\"><p>text</p></MudGrid>",
+  "<MudGrid\n    Class=\"pa-8\"\n    Spacing=\"12\"\n>\n    <p>text</p>\n</MudGrid>")
+
 print("\n=== SUMMARY ===")
 print("Passed: " .. tests_passed)
 print("Failed: " .. tests_failed)
