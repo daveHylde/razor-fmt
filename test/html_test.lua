@@ -647,6 +647,89 @@ test("Stacked attributes no blank lines between",
   "<MudGrid Class=\"pa-8\" Spacing=\"12\"><p>text</p></MudGrid>",
   "<MudGrid\n    Class=\"pa-8\"\n    Spacing=\"12\"\n>\n    <p>text</p>\n</MudGrid>")
 
+-- Nested @if blocks should not get extra indentation
+test("Nested @if blocks - proper indentation",
+  [[<MudStack>
+    @if (Receipt is not null)
+    {
+        <div>
+            @if (icon != null)
+            {
+                <p>Icon</p>
+            }
+        </div>
+    }
+</MudStack>]],
+  [[<MudStack>
+    @if (Receipt is not null)
+    {
+        <div>
+            @if (icon != null)
+            {
+                <p>Icon</p>
+            }
+        </div>
+    }
+</MudStack>]])
+
+-- @{ } code block with switch expressions should be normalized
+test("@{ } code block indentation normalization",
+  [[<MudStack>
+    @{
+        string icon = _model switch {
+            { Status: Approved } => Icons.CheckCircle,
+            { Status: Sent } => Icons.Warning,
+            _ => ""
+        };
+    }
+</MudStack>]],
+  [[<MudStack>
+    @{
+        string icon = _model switch {
+            { Status: Approved } => Icons.CheckCircle,
+            { Status: Sent } => Icons.Warning,
+            _ => ""
+        };
+    }
+</MudStack>]])
+
+-- Complex nested structure with @if and @{ }
+test("Complex nested @if with @{ } code block",
+  [[<div>
+    @if (condition)
+    {
+        <MudStack>
+            @{
+                var x = _model switch {
+                    { Status: Active } => 1,
+                    _ => 0
+                };
+            }
+            @if (nested)
+            {
+                <p>Text</p>
+            }
+        </MudStack>
+    }
+</div>]],
+  [[<div>
+    @if (condition)
+    {
+        <MudStack>
+            @{
+                var x = _model switch {
+                    { Status: Active } => 1,
+                    _ => 0
+                };
+            }
+            @if (nested)
+            {
+                <p>Text</p>
+            }
+        </MudStack>
+    }
+</div>]])
+
 print("\n=== SUMMARY ===")
 print("Passed: " .. tests_passed)
 print("Failed: " .. tests_failed)

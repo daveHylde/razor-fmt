@@ -14,7 +14,10 @@ local function run_formatter(cmd, args, input)
     return nil, cmd .. " not found in PATH"
   end
 
-  local Job = require("plenary.job")
+  local has_plenary, Job = pcall(require, "plenary.job")
+  if not has_plenary then
+    return nil, "plenary.nvim not available"
+  end
   local result = nil
   local error_msg = nil
 

@@ -31,28 +31,59 @@ format_control_flow_block = function(content, base_indent, config)
   local indent_str = string.rep(" ", config.indent_size)
   local lines = {}
 
-  -- Helper to format body content (recursively format template content)
-  local function format_body(body, indent)
-    if not body then
-      return {}
-    end
+   -- Helper to format body content (recursively format template content)
+   local function format_body(body, indent)
+     if not body then
+       return {}
+     end
 
-    local result = {}
-    -- Use a simplified formatting for the body
-    local body_formatted = M.format(body, config)
+     local result = {}
+     
+     -- First, normalize the body indentation by removing common leading whitespace
+     -- This is necessary because the body retains its original source indentation
+     local body_lines = {}
+     local min_body_indent = nil
+     for line in body:gmatch("[^\n]*") do
+       table.insert(body_lines, line)
+       if line:match("%S") then  -- Only check non-blank lines
+         local spaces = line:match("^( *)")
+         local count = spaces and #spaces or 0
+         if min_body_indent == nil or count < min_body_indent then
+           min_body_indent = count
+         end
+       end
+     end
+     
+     min_body_indent = min_body_indent or 0
+     
+     -- Remove the common leading whitespace from the body
+     local normalized_body = {}
+     for _, line in ipairs(body_lines) do
+       if line:match("%S") then
+         table.insert(normalized_body, line:sub(min_body_indent + 1))
+       elseif #normalized_body > 0 then
+         table.insert(normalized_body, "")
+       end
+     end
+     
+     local body_normalized = table.concat(normalized_body, "\n")
+     
+     -- Now format the normalized body
+     local body_formatted = M.format(body_normalized, config)
 
-    -- Split into lines and add proper indentation
-    for line in body_formatted:gmatch("[^\n]*") do
-      if line:match("%S") then
-        table.insert(result, indent .. line)
-      elseif #result > 0 then
-        -- Preserve blank lines within content
-        table.insert(result, "")
-      end
-    end
+     -- Split into lines and add proper indentation
+     for line in body_formatted:gmatch("[^\n]*") do
+       if line:match("%S") then
+         -- The formatted body starts at indent level 0, so we just need to apply our indent
+         table.insert(result, indent .. line)
+       elseif #result > 0 then
+         -- Preserve blank lines within content
+         table.insert(result, "")
+       end
+     end
 
-    return result
-  end
+     return result
+   end
   
   -- Helper to format a switch case's content (HTML mixed with break statement)
   local function format_switch_case_content(case_content, indent)
@@ -72,17 +103,45 @@ format_control_flow_block = function(content, base_indent, config)
       has_break = nil
     end
     
-    -- Format the main HTML content
-    if main_content and main_content:match("%S") then
-      local formatted = M.format(main_content, config)
-      for line in formatted:gmatch("[^\n]*") do
-        if line:match("%S") then
-          table.insert(result, indent .. line)
-        elseif #result > 0 then
-          table.insert(result, "")
-        end
-      end
-    end
+     -- Format the main HTML content
+     if main_content and main_content:match("%S") then
+       -- Normalize the content indentation by removing common leading whitespace
+       local content_lines = {}
+       local min_content_indent = nil
+       for line in main_content:gmatch("[^\n]*") do
+         table.insert(content_lines, line)
+         if line:match("%S") then  -- Only check non-blank lines
+           local spaces = line:match("^( *)")
+           local count = spaces and #spaces or 0
+           if min_content_indent == nil or count < min_content_indent then
+             min_content_indent = count
+           end
+         end
+       end
+       
+       min_content_indent = min_content_indent or 0
+       
+       -- Remove the common leading whitespace
+       local normalized_content = {}
+       for _, line in ipairs(content_lines) do
+         if line:match("%S") then
+           table.insert(normalized_content, line:sub(min_content_indent + 1))
+         elseif #normalized_content > 0 then
+           table.insert(normalized_content, "")
+         end
+       end
+       
+       local content_normalized = table.concat(normalized_content, "\n")
+       local formatted = M.format(content_normalized, config)
+       
+       for line in formatted:gmatch("[^\n]*") do
+         if line:match("%S") then
+           table.insert(result, indent .. line)
+         elseif #result > 0 then
+           table.insert(result, "")
+         end
+       end
+     end
     
     -- Add break statement
     if has_break then
@@ -92,16 +151,40 @@ format_control_flow_block = function(content, base_indent, config)
     return result
   end
 
-  -- Special case: @{ } code block - keep @{ together
-  if parsed.keyword == "" and parsed.header == "@" then
-    table.insert(lines, base_indent .. "@{")
-    local body_lines = format_body(parsed.body, base_indent .. indent_str)
-    for _, line in ipairs(body_lines) do
-      table.insert(lines, line)
-    end
-    table.insert(lines, base_indent .. "}")
-    return table.concat(lines, "\n")
-  end
+   -- Special case: @{ } code block - format with CSharpier if available
+   if parsed.keyword == "" and parsed.header == "@" then
+     table.insert(lines, base_indent .. "@{")
+     
+     -- Try to format the C# code with CSharpier
+     local csharp_available, csharp = pcall(require, "razor-fmt.csharp")
+     local formatted_csharp = nil
+     
+     if csharp_available then
+       formatted_csharp, _ = csharp.format(parsed.body)
+     end
+     
+     if formatted_csharp then
+       -- CSharpier formatted it successfully - use the formatted version
+       local csharp_lines = vim.split(formatted_csharp, "\n", { plain = true })
+       for _, line in ipairs(csharp_lines) do
+         if line:match("%S") then
+           table.insert(lines, base_indent .. indent_str .. line)
+         else
+           table.insert(lines, "")
+         end
+       end
+     else
+       -- CSharpier not available or errored - fall back to HTML formatting
+       -- but at least normalize the indentation
+       local body_lines = format_body(parsed.body, base_indent .. indent_str)
+       for _, line in ipairs(body_lines) do
+         table.insert(lines, line)
+       end
+     end
+     
+     table.insert(lines, base_indent .. "}")
+     return table.concat(lines, "\n")
+   end
   
   -- Special case: @switch - need to handle case/default labels specially
   if parsed.keyword == "switch" then
