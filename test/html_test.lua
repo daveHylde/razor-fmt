@@ -242,9 +242,9 @@ test("Multiple attributes stack on block element",
   "<div class=\"foo\" id=\"bar\"><span>child</span></div>",
   "<div\n    class=\"foo\"\n    id=\"bar\"\n>\n    <span>child</span>\n</div>")
 
-test("Multiple attributes inline when only text content",
+test("Multiple attributes stacks when exceeds max even with text content",
   "<div class=\"foo\" id=\"bar\">content</div>",
-  "<div class=\"foo\" id=\"bar\">content</div>")
+  "<div\n    class=\"foo\"\n    id=\"bar\"\n>content</div>")
 
 test("Single attribute no stack",
   "<div class=\"foo\">content</div>",
@@ -294,9 +294,10 @@ test("Indexer expression",
   "<span>@L[\"SendToEmail\"]</span>")
 
 -- Complex real-world examples
-test("Blazor component with attributes and inline content",
+-- When max_attributes_per_line=1, components with inline content should still stack attributes if >1
+test("Blazor component with attributes and inline content should stack when exceeds max",
   "<MudButton Variant=\"Variant.Filled\" Color=\"Color.Primary\" OnClick=\"HandleClick\">Click Me</MudButton>",
-  "<MudButton Variant=\"Variant.Filled\" Color=\"Color.Primary\" OnClick=\"HandleClick\">Click Me</MudButton>")
+  "<MudButton\n    Variant=\"Variant.Filled\"\n    Color=\"Color.Primary\"\n    OnClick=\"HandleClick\"\n>Click Me</MudButton>")
 
 test("Blazor component with attributes and block content",
   "<MudButton Variant=\"Variant.Filled\" Color=\"Color.Primary\"><span>Click Me</span></MudButton>",
@@ -395,7 +396,7 @@ test("Complex MudBlazor component",
 -- Complex attributes with lambdas should not break
 test("Lambda in attribute stays intact",
   [[<MudDynamicTabs CloseTab="@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))" KeepPanelsAlive>content</MudDynamicTabs>]],
-  [[<MudDynamicTabs CloseTab="@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))" KeepPanelsAlive>content</MudDynamicTabs>]])
+  "<MudDynamicTabs\n    CloseTab=\"@(x => ProcessingPageState.DeleteTab(x.ID as int? ?? -1))\"\n    KeepPanelsAlive\n>content</MudDynamicTabs>")
 
 -- @for inside component
 test("@for block inside component",
@@ -454,11 +455,11 @@ test("Complex Func expression in attribute",
 
 test("Multiple attributes with Razor expressions",
   [[<Column Property="x => x.Name" Title="@Localizer["Name"]" Hidden="@(IsHidden("Name"))">content</Column>]],
-  [[<Column Property="x => x.Name" Title="@Localizer["Name"]" Hidden="@(IsHidden("Name"))">content</Column>]])
+  "<Column\n    Property=\"x => x.Name\"\n    Title=\"@Localizer[\"Name\"]\"\n    Hidden=\"@(IsHidden(\"Name\"))\"\n>content</Column>")
 
 test("Razor expression with > inside attribute",
   [[<MudTabPanel Text="@($"{(i>9 ? "" : $"({i})")}")" ID="@i">content</MudTabPanel>]],
-  [[<MudTabPanel Text="@($"{(i>9 ? "" : $"({i})")}")" ID="@i">content</MudTabPanel>]])
+  "<MudTabPanel\n    Text=\"@($\"{(i>9 ? \"\" : $\"({i})\")}\")\"\n    ID=\"@i\"\n>content</MudTabPanel>")
 
 test("Complex ternary with > in attribute",
   [[<span class="@(value > 10 ? "large" : "small")">text</span>]],
@@ -640,7 +641,7 @@ test("Empty component with many attributes should stack",
 -- @if-else with stacked attributes in body (regression test for blank line issue)
 test("@if-else with stacked attributes no extra blank lines",
   "@if (_loading) { <MudGrid Class=\"pa-8\" Spacing=\"12\"><MudItem sm=\"12\" md=\"6\">Loading</MudItem></MudGrid> } else { <MudGrid Class=\"px-8\" Spacing=\"8\"><MudItem sm=\"12\" md=\"6\">Content</MudItem></MudGrid> }",
-  "@if (_loading)\n{\n    <MudGrid\n        Class=\"pa-8\"\n        Spacing=\"12\"\n    >\n        <MudItem sm=\"12\" md=\"6\">Loading</MudItem>\n    </MudGrid>\n}\nelse\n{\n    <MudGrid\n        Class=\"px-8\"\n        Spacing=\"8\"\n    >\n        <MudItem sm=\"12\" md=\"6\">Content</MudItem>\n    </MudGrid>\n}")
+  "@if (_loading)\n{\n    <MudGrid\n        Class=\"pa-8\"\n        Spacing=\"12\"\n    >\n        <MudItem\n            sm=\"12\"\n            md=\"6\"\n        >Loading</MudItem>\n    </MudGrid>\n}\nelse\n{\n    <MudGrid\n        Class=\"px-8\"\n        Spacing=\"8\"\n    >\n        <MudItem\n            sm=\"12\"\n            md=\"6\"\n        >Content</MudItem>\n    </MudGrid>\n}")
 
 -- Stacked attributes should not have blank lines between them
 test("Stacked attributes no blank lines between",

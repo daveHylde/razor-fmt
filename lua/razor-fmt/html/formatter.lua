@@ -385,10 +385,31 @@ function M.format(input, config)
       end
 
       if has_only_inline and close_idx and #inline_parts > 0 then
-        -- Single line: <tag attrs>content</tag> - force inline formatting
-        local formatted = attributes.format_stacked(token.attributes, token.tag, false, config, true)
+        -- Tag with inline text content
         local inline_content = table.concat(inline_parts, " ")
-        add_line(indent .. formatted .. inline_content .. "</" .. token.tag .. ">")
+        local should_stack = #token.attributes > config.max_attributes_per_line
+        if should_stack then
+          -- Stack attributes, but keep content on same line as closing >
+          local formatted = attributes.format_stacked(token.attributes, token.tag, false, config)
+          local formatted_lines = {}
+          for line in formatted:gmatch("[^\n]*") do
+            if line ~= "" then
+              table.insert(formatted_lines, line)
+            end
+          end
+          -- Add all lines except the last one normally
+          for idx = 1, #formatted_lines - 1 do
+            add_line(indent .. formatted_lines[idx])
+          end
+          -- Last line is ">" - append content and closing tag to it
+          if #formatted_lines > 0 then
+            add_line(indent .. formatted_lines[#formatted_lines] .. inline_content .. "</" .. token.tag .. ">")
+          end
+        else
+          -- Few attributes - keep everything inline
+          local formatted = attributes.format_stacked(token.attributes, token.tag, false, config, true)
+          add_line(indent .. formatted .. inline_content .. "</" .. token.tag .. ">")
+        end
         i = close_idx
       elseif has_only_inline and close_idx and #inline_parts == 0 then
         -- Empty tag - stack attributes if many, but keep open/close on same structure
