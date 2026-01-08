@@ -38,6 +38,35 @@ Install cssls via Mason:
 Without CSharpier installed, HTML formatting will still work but `@code{}` blocks will be left unchanged.
 Without cssls running, `<style>` tag content will be re-indented but not reformatted.
 
+### Setting up cssls for Razor files
+
+cssls must be running and attached to a buffer for CSS formatting to work. Since Razor files aren't CSS files, you need to configure your LSP setup to start cssls for Razor filetypes.
+
+**With nvim-lspconfig:**
+
+```lua
+require("lspconfig").cssls.setup({
+  filetypes = { "css", "scss", "less", "razor", "cshtml" },
+})
+```
+
+**With lazy.nvim and nvim-lspconfig:**
+
+```lua
+{
+  "neovim/nvim-lspconfig",
+  opts = {
+    servers = {
+      cssls = {
+        filetypes = { "css", "scss", "less", "razor", "cshtml" },
+      },
+    },
+  },
+}
+```
+
+You can verify cssls is running with `:LspInfo` when editing a Razor file.
+
 ## Installation
 
 ### [lazy.nvim](https://github.com/folke/lazy.nvim)

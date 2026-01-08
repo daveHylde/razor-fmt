@@ -119,6 +119,12 @@ test("Style tag with keyframes preserves relative indentation",
   "<style>\n.loading { display: flex; }\n.spinner { width: 50px; }\n@keyframes rotate {\n    from { transform: rotate(0deg); }\n    to { transform: rotate(360deg); }\n}\n</style>",
   "<style>\n    .loading { display: flex; }\n    .spinner { width: 50px; }\n    @keyframes rotate {\n        from { transform: rotate(0deg); }\n        to { transform: rotate(360deg); }\n    }\n</style>")
 
+-- Bug: CSS with inconsistent input indentation - without cssls, relative indentation is preserved
+-- (This is expected behavior without LSP - proper formatting requires cssls)
+test("Style tag with inconsistent indentation preserves relative structure",
+  "<style>\n.loading-screen-container {\n        display: flex;\n        justify-content: center;\n    }\n    .spinner {\n        width: 50px;\n    }\n</style>",
+  "<style>\n    .loading-screen-container {\n            display: flex;\n            justify-content: center;\n        }\n        .spinner {\n            width: 50px;\n        }\n</style>")
+
 print("\n=== SUMMARY ===")
 print("Passed: " .. tests_passed)
 print("Failed: " .. tests_failed)
