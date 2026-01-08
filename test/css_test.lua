@@ -83,7 +83,7 @@ test("Style tag with type attribute",
 -- Multi-line CSS content
 test("Style tag with multi-line CSS preserves structure",
   "<style>\n.foo {\n    color: red;\n}\n</style>",
-  "<style>\n    .foo {\n    color: red;\n    }\n</style>")
+  "<style>\n    .foo {\n        color: red;\n    }\n</style>")
 
 -- Style tag with Blazor scoped attribute
 test("Style tag with scoped attribute",
@@ -113,6 +113,11 @@ test("Style tag with CSS variables",
 test("Style tag in full Razor component",
   "@page \"/test\"\n\n<div>\n    <style>.test { color: red; }</style>\n    <p>Hello</p>\n</div>",
   "@page \"/test\"\n\n<div>\n    <style>\n        .test { color: red; }\n    </style>\n    <p>Hello</p>\n</div>")
+
+-- Complex multi-rule CSS with @keyframes (without cssls, indentation is preserved but not reformatted)
+test("Style tag with keyframes preserves relative indentation",
+  "<style>\n.loading { display: flex; }\n.spinner { width: 50px; }\n@keyframes rotate {\n    from { transform: rotate(0deg); }\n    to { transform: rotate(360deg); }\n}\n</style>",
+  "<style>\n    .loading { display: flex; }\n    .spinner { width: 50px; }\n    @keyframes rotate {\n        from { transform: rotate(0deg); }\n        to { transform: rotate(360deg); }\n    }\n</style>")
 
 print("\n=== SUMMARY ===")
 print("Passed: " .. tests_passed)

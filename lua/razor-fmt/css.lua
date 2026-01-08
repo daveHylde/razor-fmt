@@ -1,5 +1,6 @@
 -- razor-fmt/css.lua
--- CSS formatting using cssls LSP
+-- CSS formatting using cssls LSP (optional dependency)
+-- If cssls is not running, CSS content is re-indented but not reformatted
 
 local M = {}
 
@@ -103,14 +104,28 @@ function M.format_for_html(css_content, base_indent, indent_size)
   formatted = formatted or css_content
 
   -- Re-indent the formatted CSS for HTML embedding
+  -- Preserve relative indentation structure from the formatted CSS
   local lines = vim.split(formatted, "\n", { plain = true })
   local result_lines = {}
   local indent_str = string.rep(" ", indent_size)
 
+  -- Find minimum indentation in the CSS (excluding blank lines)
+  local min_indent = math.huge
   for _, line in ipairs(lines) do
-    local trimmed = line:match("^%s*(.-)%s*$")
-    if trimmed and trimmed ~= "" then
-      table.insert(result_lines, base_indent .. indent_str .. trimmed)
+    if line:match("%S") then
+      local leading = line:match("^(%s*)")
+      min_indent = math.min(min_indent, #leading)
+    end
+  end
+  if min_indent == math.huge then
+    min_indent = 0
+  end
+
+  for _, line in ipairs(lines) do
+    if line:match("%S") then
+      -- Remove the common minimum indent and add base + one level
+      local stripped = line:sub(min_indent + 1)
+      table.insert(result_lines, base_indent .. indent_str .. stripped)
     elseif #result_lines > 0 then
       -- Preserve blank lines within CSS
       table.insert(result_lines, "")
