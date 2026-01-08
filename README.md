@@ -4,6 +4,7 @@ Opinionated Razor file formatter for Neovim.
 
 - Formats `@code{}` blocks with [CSharpier](https://csharpier.com/)
 - Formats HTML/template sections with JetBrains Rider-inspired defaults
+- Formats `<style>` tag content with [cssls](https://github.com/microsoft/vscode-css-languageservice) LSP
 - Supports `.razor` and `.cshtml` files
 
 ## Requirements
@@ -14,8 +15,9 @@ Opinionated Razor file formatter for Neovim.
 ### Optional
 
 - [CSharpier](https://csharpier.com/) - Required for formatting `@code{}` blocks
+- [cssls](https://github.com/microsoft/vscode-css-languageservice) - Required for formatting `<style>` tag content
 
-Install via Mason:
+Install CSharpier via Mason:
 
 ```vim
 :MasonInstall csharpier
@@ -27,7 +29,14 @@ Or via dotnet:
 dotnet tool install -g csharpier
 ```
 
+Install cssls via Mason:
+
+```vim
+:MasonInstall css-lsp
+```
+
 Without CSharpier installed, HTML formatting will still work but `@code{}` blocks will be left unchanged.
+Without cssls running, `<style>` tag content will be re-indented but not reformatted.
 
 ## Installation
 
@@ -77,6 +86,15 @@ With custom options:
 
       -- Max attributes before stacking (1 = stack when more than 1 attribute)
       max_attributes_per_line = 1,
+    },
+
+    -- CSS formatting options (for <style> tag content)
+    css = {
+      -- Enable CSS formatting via cssls LSP
+      enabled = true,
+
+      -- Indent size for CSS
+      indent_size = 4,
     },
   },
 }
@@ -190,6 +208,32 @@ Razor control flow blocks (`@if`, `@foreach`, `@for`, `@while`, `@switch`, `@try
 }
 ```
 
+### CSS (`<style>` tags)
+
+CSS content inside `<style>` tags is formatted using the cssls LSP server. The `<style>` tag is output on multiple lines with the CSS content properly indented.
+
+**Before:**
+
+```html
+<style>.container{padding:1rem;margin:0}.button{color:red;}</style>
+```
+
+**After:**
+
+```html
+<style>
+    .container {
+        padding: 1rem;
+        margin: 0;
+    }
+    .button {
+        color: red;
+    }
+</style>
+```
+
+If cssls is not running, the CSS content will be re-indented to match the surrounding HTML but not reformatted.
+
 ## Configuration Options
 
 | Option | Type | Default | Description |
@@ -199,6 +243,8 @@ Razor control flow blocks (`@if`, `@foreach`, `@for`, `@while`, `@switch`, `@try
 | `format_html` | boolean | `true` | Enable HTML/template formatting |
 | `html.indent_size` | number | `4` | Indent size for HTML elements |
 | `html.max_attributes_per_line` | number | `1` | Max attributes before stacking (1 = stack when >1 attribute) |
+| `css.enabled` | boolean | `true` | Enable CSS formatting via cssls LSP for `<style>` tags |
+| `css.indent_size` | number | `4` | Indent size for CSS content |
 
 ## License
 

@@ -21,6 +21,13 @@ M.config = {
     -- Max attributes before stacking (0 = always stack when >1 attribute)
     max_attributes_per_line = 1,
   },
+  -- CSS formatting options (for <style> tag content)
+  css = {
+    -- Enable CSS formatting via cssls LSP
+    enabled = true,
+    -- Indent size for CSS
+    indent_size = 4,
+  },
 }
 
 --- Format Razor content - formats @code{} blocks with CSharpier and HTML with custom formatter
@@ -49,7 +56,8 @@ function M.format(input)
 
       -- Only format if there's actual content
       if not region_content:match("^%s*$") then
-        local formatted_html = html.format(region_content, M.config.html)
+        local html_config = vim.tbl_extend("force", M.config.html, { css = M.config.css })
+        local formatted_html = html.format(region_content, html_config)
         local formatted_lines = vim.split(formatted_html, "\n", { plain = true })
 
         -- Remove old lines

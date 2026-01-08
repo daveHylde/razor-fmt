@@ -24,9 +24,13 @@ M.VOID_ELEMENTS = {
 --- Elements that should preserve their content as-is
 M.PRESERVE_CONTENT_ELEMENTS = {
   script = true,
-  style = true,
   pre = true,
   textarea = true,
+}
+
+--- Elements that should have their content formatted with external formatters
+M.FORMAT_CONTENT_ELEMENTS = {
+  style = true, -- CSS formatted via cssls LSP
 }
 
 --- Token types for the HTML/Razor tokenizer

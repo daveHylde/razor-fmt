@@ -5,6 +5,7 @@ local constants = require("razor-fmt.html.constants")
 local attributes = require("razor-fmt.html.attributes")
 local razor = require("razor-fmt.html.razor")
 local tokenizer = require("razor-fmt.html.tokenizer")
+local css = require("razor-fmt.css")
 
 local M = {}
 
@@ -384,8 +385,43 @@ function M.format(input, config)
         end
       end
 
-      if has_only_inline and close_idx and #inline_parts > 0 then
-        -- Tag with inline text content
+      if tag_lower == "style" then
+        -- Handle <style> tag - either format with CSS LSP or preserve content
+        -- Must check this BEFORE the has_only_inline check to ensure style content is handled properly
+        local formatted_tag = attributes.format_stacked(token.attributes, token.tag, false, config, true)
+        local content_parts = {}
+        local content_start = i + 1
+        local content_end = content_start
+        while content_end <= #tokens do
+          local next_token = tokens[content_end]
+          if next_token.type == TOKEN_TYPES.TAG_CLOSE and next_token.tag and next_token.tag:lower() == tag_lower then
+            break
+          end
+          table.insert(content_parts, next_token.content)
+          content_end = content_end + 1
+        end
+
+        local css_content = table.concat(content_parts)
+        local trimmed_css = css_content:match("^%s*(.-)%s*$")
+
+        if config.css and config.css.enabled and trimmed_css and trimmed_css ~= "" then
+          -- Format CSS content and output multi-line style block
+          local css_indent_size = config.css.indent_size or config.indent_size
+          local formatted_css = css.format_for_html(trimmed_css, indent, css_indent_size)
+          add_line(indent .. formatted_tag)
+          -- Add the formatted CSS lines
+          for line in formatted_css:gmatch("[^\n]*") do
+            add_line(line)
+          end
+          add_line(indent .. "</" .. token.tag .. ">")
+        else
+          -- CSS disabled or empty - preserve content exactly
+          add_line(indent .. formatted_tag .. css_content .. "</" .. token.tag .. ">")
+        end
+        i = content_end
+      elseif has_only_inline and close_idx and #inline_parts > 0 then
+        -- Single line: <tag attrs>content</tag> - force inline formatting
+        local formatted = attributes.format_stacked(token.attributes, token.tag, false, config, true)
         local inline_content = table.concat(inline_parts, " ")
         local should_stack = #token.attributes > config.max_attributes_per_line
         if should_stack then
@@ -438,7 +474,7 @@ function M.format(input, config)
         end
         i = close_idx
       elseif PRESERVE_CONTENT_ELEMENTS[tag_lower] then
-        -- Preserve content exactly (script, style, pre, textarea) - force inline
+        -- Preserve content exactly (script, pre, textarea) - force inline
         local formatted = attributes.format_stacked(token.attributes, token.tag, false, config, true)
         local content_parts = {}
         local content_start = i + 1
