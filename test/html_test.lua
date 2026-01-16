@@ -731,6 +731,123 @@ test("Complex nested @if with @{ } code block",
     }
 </div>]])
 
+print("\n=== MAX LINE LENGTH TESTS ===\n")
+
+-- Tests for max_line_length feature
+-- When a line would exceed max_line_length, attributes should wrap even if under max_attributes_per_line
+
+-- Helper to test with specific config
+local function test_with_config(name, input, expected, test_config)
+  local result = html.format(input, test_config)
+  if result == expected then
+    tests_passed = tests_passed + 1
+    print("✓ " .. name)
+  else
+    tests_failed = tests_failed + 1
+    print("✗ " .. name)
+    print("  Input:")
+    for line in input:gmatch("[^\n]+") do
+      print("    " .. line)
+    end
+    print("  Expected:")
+    for line in expected:gmatch("[^\n]+") do
+      print("    " .. line)
+    end
+    print("  Got:")
+    for line in result:gmatch("[^\n]+") do
+      print("    " .. line)
+    end
+    print("")
+  end
+end
+
+-- Config with max_line_length enabled
+local config_with_line_length = {
+  indent_size = 4,
+  max_attributes_per_line = 3, -- Allow up to 3 attributes
+  max_line_length = 80, -- But wrap if line exceeds 80 chars
+}
+
+-- Config with high attribute limit but low line length
+local config_line_length_100 = {
+  indent_size = 4,
+  max_attributes_per_line = 10, -- Very high attribute limit
+  max_line_length = 100,
+}
+
+-- Config with line length disabled (0 = no limit)
+local config_no_line_length = {
+  indent_size = 4,
+  max_attributes_per_line = 10,
+  max_line_length = 0, -- Disabled
+}
+
+-- Test: Long generic type attribute should wrap even with 1 attribute
+test_with_config("Long generic type forces wrap even with single attribute",
+  [[<MudList T="Dictionary<string, Dictionary<string, IEnumerable<AuditDifferenceDto>>>" Dense>content</MudList>]],
+  "<MudList\n    T=\"Dictionary<string, Dictionary<string, IEnumerable<AuditDifferenceDto>>>\"\n    Dense\n>content</MudList>",
+  config_with_line_length)
+
+-- Test: Short attributes under line length stay on one line
+test_with_config("Short attributes under line length stay inline",
+  [[<div class="foo" id="bar">content</div>]],
+  [[<div class="foo" id="bar">content</div>]],
+  config_with_line_length)
+
+-- Test: Attributes exceeding line length should wrap
+test_with_config("Attributes exceeding line length should wrap",
+  [[<MudText Typo="Typo.caption" Style="@(string.IsNullOrEmpty(entry.OldValue) ? "font-style: italic;" : "")">text</MudText>]],
+  "<MudText\n    Typo=\"Typo.caption\"\n    Style=\"@(string.IsNullOrEmpty(entry.OldValue) ? \"font-style: italic;\" : \"\")\"\n>text</MudText>",
+  config_with_line_length)
+
+-- Test: Self-closing tag with long attributes should wrap
+test_with_config("Self-closing tag with long attributes wraps",
+  [[<MudIcon Icon="@Icons.Material.Outlined.SubdirectoryArrowRight" Size="Size.Small" />]],
+  "<MudIcon\n    Icon=\"@Icons.Material.Outlined.SubdirectoryArrowRight\"\n    Size=\"Size.Small\"\n/>",
+  config_with_line_length)
+
+-- Test: Short self-closing tag stays inline
+test_with_config("Short self-closing tag stays inline",
+  [[<input type="text" name="foo" />]],
+  [[<input type="text" name="foo" />]],
+  config_with_line_length)
+
+-- Test: Empty component with long attributes wraps
+test_with_config("Empty component with long attributes wraps",
+  [[<PropertyColumn Property="x => x.VeryLongPropertyNameThatMakesTheLineExceedTheLimit" Title="@Localizer["SomeKey"]"></PropertyColumn>]],
+  "<PropertyColumn\n    Property=\"x => x.VeryLongPropertyNameThatMakesTheLineExceedTheLimit\"\n    Title=\"@Localizer[\"SomeKey\"]\"\n></PropertyColumn>",
+  config_with_line_length)
+
+-- Test: max_line_length=0 disables line length checking
+test_with_config("max_line_length=0 disables line length check",
+  [[<MudList T="Dictionary<string, Dictionary<string, IEnumerable<AuditDifferenceDto>>>" Dense>content</MudList>]],
+  [[<MudList T="Dictionary<string, Dictionary<string, IEnumerable<AuditDifferenceDto>>>" Dense>content</MudList>]],
+  config_no_line_length)
+
+-- Test: Block element with children and long attributes
+test_with_config("Block element with children and long attributes wraps",
+  [[<MudListItem Text="@L[category.Key]" Expanded="@(category.Value.Count() < 10 && SomeOtherCondition)"><NestedList>content</NestedList></MudListItem>]],
+  "<MudListItem\n    Text=\"@L[category.Key]\"\n    Expanded=\"@(category.Value.Count() < 10 && SomeOtherCondition)\"\n>\n    <NestedList>content</NestedList>\n</MudListItem>",
+  config_with_line_length)
+
+-- Test: Nested elements with long attributes
+test_with_config("Nested elements respect line length",
+  [[<div><MudText Typo="Typo.caption" Style="@(string.IsNullOrEmpty(value) ? "font-style: italic;" : "")">text</MudText></div>]],
+  "<div>\n    <MudText\n        Typo=\"Typo.caption\"\n        Style=\"@(string.IsNullOrEmpty(value) ? \"font-style: italic;\" : \"\")\"\n    >text</MudText>\n</div>",
+  config_with_line_length)
+
+-- Test: Line length accounts for indentation
+test_with_config("Line length accounts for indentation level",
+  [[<div><div><div><span class="somewhat-long-class-name-that-pushes-over-limit" id="element-id">text</span></div></div></div>]],
+  "<div>\n    <div>\n        <div>\n            <span\n                class=\"somewhat-long-class-name-that-pushes-over-limit\"\n                id=\"element-id\"\n            >text</span>\n        </div>\n    </div>\n</div>",
+  config_with_line_length)
+
+-- Test with 100 char limit - same input should be inline
+test_with_config("100 char limit keeps shorter lines inline",
+  [[<div class="somewhat-long-class" id="element-id">text</div>]],
+  [[<div class="somewhat-long-class" id="element-id">text</div>]],
+  config_line_length_100)
+
 print("\n=== SUMMARY ===")
 print("Passed: " .. tests_passed)
 print("Failed: " .. tests_failed)

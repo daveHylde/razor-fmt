@@ -20,6 +20,9 @@ M.config = {
     indent_size = 4,
     -- Max attributes before stacking (0 = always stack when >1 attribute)
     max_attributes_per_line = 1,
+    -- Max line length before wrapping attributes (0 = no limit)
+    -- If line would exceed this, wrap even if under max_attributes_per_line
+    max_line_length = 120,
   },
   -- CSS formatting options (for <style> tag content)
   css = {

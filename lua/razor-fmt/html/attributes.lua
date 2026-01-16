@@ -223,14 +223,43 @@ function M.parse(attr_string)
   return attrs
 end
 
+--- Calculate the inline length of a tag with all its attributes
+---@param tag_name string
+---@param attrs table[]
+---@param is_self_closing boolean
+---@return number
+local function calculate_inline_length(tag_name, attrs, is_self_closing)
+  -- Start with: <tagname
+  local length = 1 + #tag_name
+  
+  -- Add each attribute: space + name + = + quote + value + quote
+  for _, attr in ipairs(attrs) do
+    if attr.value then
+      length = length + 1 + #attr.name + 1 + 1 + #attr.value + 1  -- " name="value""
+    else
+      length = length + 1 + #attr.name  -- " name"
+    end
+  end
+  
+  -- Add closing: " />" or ">"
+  if is_self_closing then
+    length = length + 3  -- " />"
+  else
+    length = length + 1  -- ">"
+  end
+  
+  return length
+end
+
 --- Format attributes with stacking
 ---@param attrs table[]
 ---@param tag_name string
 ---@param is_self_closing boolean
 ---@param config table
 ---@param force_inline boolean|nil If true, don't stack even if many attributes
+---@param current_indent number|nil Current indentation level (in characters) for line length calculation
 ---@return string
-function M.format_stacked(attrs, tag_name, is_self_closing, config, force_inline)
+function M.format_stacked(attrs, tag_name, is_self_closing, config, force_inline, current_indent)
   if not tag_name then
     return ""
   end
@@ -244,7 +273,21 @@ function M.format_stacked(attrs, tag_name, is_self_closing, config, force_inline
   end
 
   local max_attrs = config.max_attributes_per_line
-  local should_stack = #attrs > max_attrs and not force_inline
+  local max_line_length = config.max_line_length or 0
+  local indent_chars = current_indent or 0
+  
+  -- Check if we should stack based on attribute count
+  local exceeds_attr_count = #attrs > max_attrs
+  
+  -- Check if we should stack based on line length
+  local exceeds_line_length = false
+  if max_line_length > 0 and #attrs > 0 then
+    local inline_length = calculate_inline_length(tag_name, attrs, is_self_closing)
+    local total_line_length = indent_chars + inline_length
+    exceeds_line_length = total_line_length > max_line_length
+  end
+  
+  local should_stack = (exceeds_attr_count or exceeds_line_length) and not force_inline
 
   if not should_stack then
     -- All attributes on one line
