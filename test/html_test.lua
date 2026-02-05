@@ -82,6 +82,10 @@ test_tokenize("Self-closing tag",
   "<br />",
   {"TAG_SELF_CLOSE"})
 
+test_tokenize("Self-closing tag with unquoted @lambda attribute",
+  "<Comp Attribute=@(() => somefunct) />",
+  {"TAG_SELF_CLOSE"})
+
 test_tokenize("Nested tags",
   "<div><span>text</span></div>",
   {"TAG_OPEN", "TAG_OPEN", "TEXT", "TAG_CLOSE", "TAG_CLOSE"})
@@ -373,6 +377,19 @@ test("Blazor @bind:event",
 test("Blazor @ref",
   "<input @ref=\"inputElement\" />",
   "<input @ref=\"inputElement\" />")
+
+-- Unquoted attribute values that start with @ should be preserved (quotes optional)
+test("Unquoted @ value preserved",
+  "<Comp Attribute=@value />",
+  "<Comp Attribute=@value />")
+
+test("Unquoted @lambda preserved",
+  "<Comp Attribute=@(() => somefunct) />",
+  "<Comp Attribute=@(() => somefunct) />")
+
+test("Stacked attributes keep unquoted @lambda",
+  "<Comp Attribute=@(() => somefunct) Other=\"x\" />",
+  "<Comp\n    Attribute=@(() => somefunct)\n    Other=\"x\"\n/>")
 
 -- Complex real-world component
 test("Complex MudBlazor component",

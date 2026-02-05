@@ -202,17 +202,28 @@ function M.parse(attr_string)
           break
         end
       else
-        -- Unquoted value (until whitespace or end)
-        local value_end = attr_string:find("%s", pos)
-        local value
-        if value_end then
-          value = attr_string:sub(pos, value_end - 1)
-          pos = value_end
+        -- Unquoted value
+        -- If it starts with @, it's a Razor expression which may contain whitespace and/or =>
+        local first = attr_string:sub(pos, pos)
+        if first == "@" then
+          local value_start = pos
+          pos = pos + 1
+          pos = skip_razor_expression(attr_string, pos, len)
+          local value = attr_string:sub(value_start, pos - 1)
+          table.insert(attrs, { name = name, value = value, quote = nil })
         else
-          value = attr_string:sub(pos)
-          pos = len + 1
+          -- Until whitespace or end
+          local value_end = attr_string:find("%s", pos)
+          local value
+          if value_end then
+            value = attr_string:sub(pos, value_end - 1)
+            pos = value_end
+          else
+            value = attr_string:sub(pos)
+            pos = len + 1
+          end
+          table.insert(attrs, { name = name, value = value, quote = '"' })
         end
-        table.insert(attrs, { name = name, value = value, quote = '"' })
       end
     else
       -- Boolean attribute (no value)
@@ -294,7 +305,11 @@ function M.format_stacked(attrs, tag_name, is_self_closing, config, force_inline
     local parts = { "<" .. tag_name }
     for _, attr in ipairs(attrs) do
       if attr.value then
-        table.insert(parts, " " .. attr.name .. "=" .. attr.quote .. attr.value .. attr.quote)
+        if attr.quote then
+          table.insert(parts, " " .. attr.name .. "=" .. attr.quote .. attr.value .. attr.quote)
+        else
+          table.insert(parts, " " .. attr.name .. "=" .. attr.value)
+        end
       else
         table.insert(parts, " " .. attr.name)
       end
@@ -318,7 +333,11 @@ function M.format_stacked(attrs, tag_name, is_self_closing, config, force_inline
   for _, attr in ipairs(attrs) do
     local attr_str
     if attr.value then
-      attr_str = attr.name .. "=" .. attr.quote .. attr.value .. attr.quote
+      if attr.quote then
+        attr_str = attr.name .. "=" .. attr.quote .. attr.value .. attr.quote
+      else
+        attr_str = attr.name .. "=" .. attr.value
+      end
     else
       attr_str = attr.name
     end
